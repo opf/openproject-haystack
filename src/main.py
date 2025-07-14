@@ -1,4 +1,3 @@
-
 #-- copyright
 # OpenProject is an open source project management software.
 # Copyright (C) the OpenProject GmbH
@@ -27,29 +26,16 @@
 # See COPYRIGHT and LICENSE files for more details.
 #++
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from haystack_integrations.components.generators.ollama import OllamaGenerator
+"""Main FastAPI application for OpenProject Haystack."""
 
-app = FastAPI()
+from fastapi import FastAPI
+from src.api.routes import router
 
-class Prompt(BaseModel):
-    prompt: str
-
-generator = OllamaGenerator(
-    model="mistral:latest",
-    url="http://ollama:11434",
-    generation_kwargs={"num_predict": 1000, "temperature": 0.7}
+app = FastAPI(
+    title="OpenProject Haystack",
+    description="AI-powered application using Haystack and Ollama",
+    version="1.0.0"
 )
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.post("/generate")
-def generate(data: Prompt):
-    try:
-        result = generator.run(data.prompt)
-        return {"response": result["replies"][0]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Include API routes
+app.include_router(router)
