@@ -19,12 +19,12 @@ def test_project_status_report():
     
     # Example request data
     payload = {
-        "project_id": "258",  # Replace with actual project ID
-        "openproject_base_url": "https://qa.openproject-stage.com"  # Replace with actual URL
+        "project_id": "1",  # Replace with actual project ID
+        "openproject_base_url": "https://your-openproject-instance.com"  # Replace with actual URL
     }
     
     # Example API key - replace with actual OpenProject API key
-    api_key = "0328bb2c3b0d9bd18b579c29eb5ccb90c68c2b79f789760bfeac865fe2147c3f"
+    api_key = "your-openproject-api-key-here"
     headers = {
         **HEADERS,
         "Authorization": f"Bearer {api_key}"
@@ -117,19 +117,3 @@ def main():
         print("❌ Server is not responding. Please start the server first.")
         sys.exit(1)
     
-    print("\n" + "="*60)
-    print("IMPORTANT: Update the configuration in this script before running!")
-    print("="*60)
-    
-    # Check if user wants to proceed with example values
-    user_input = input("\nDo you want to proceed with the example test? (y/N): ")
-    if user_input.lower() != 'y':
-        print("Please update the configuration in the script and run again.")
-        return
-    
-    print("\n" + "="*60)
-    test_project_status_report()
-
-
-if __name__ == "__main__":
-    main()
