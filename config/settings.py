@@ -15,6 +15,10 @@ class Settings:
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://ollama:11434")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral:latest")
     
+    # Model management
+    MODELS_TO_PULL: str = os.getenv("MODELS_TO_PULL", "mistral:latest")
+    REQUIRED_MODELS: list = os.getenv("REQUIRED_MODELS", "mistral:latest").split(",")
+    
     # Generation parameters
     GENERATION_NUM_PREDICT: int = int(os.getenv("GENERATION_NUM_PREDICT", "1000"))
     GENERATION_TEMPERATURE: float = float(os.getenv("GENERATION_TEMPERATURE", "0.7"))

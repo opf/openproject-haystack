@@ -7,6 +7,10 @@ from src.templates.report_templates import ProjectReportAnalyzer, ProjectStatusR
 from typing import List, Tuple, Dict, Any
 import uuid
 import re
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class GenerationPipeline:
@@ -14,6 +18,9 @@ class GenerationPipeline:
     
     def __init__(self):
         """Initialize the generation pipeline."""
+        # Validate that required models are available
+        self._validate_models()
+        
         self.generator = OllamaGenerator(
             model=settings.OLLAMA_MODEL,
             url=settings.OLLAMA_URL,
@@ -22,6 +29,50 @@ class GenerationPipeline:
                 "temperature": settings.GENERATION_TEMPERATURE
             }
         )
+    
+    def _validate_models(self):
+        """Validate that required models are available in Ollama."""
+        try:
+            available_models = self._get_ollama_models()
+            required_models = [model.strip() for model in settings.REQUIRED_MODELS if model.strip()]
+            
+            missing_models = []
+            for model in required_models:
+                if model not in available_models:
+                    missing_models.append(model)
+            
+            if missing_models:
+                logger.error(f"Missing required models: {missing_models}")
+                logger.error(f"Available models: {available_models}")
+                raise RuntimeError(
+                    f"Required models not found: {missing_models}. "
+                    f"Available models: {available_models}. "
+                    f"Please ensure the ollama-init service has completed successfully."
+                )
+            
+            logger.info(f"All required models are available: {required_models}")
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to connect to Ollama service: {e}")
+            raise RuntimeError(
+                f"Cannot connect to Ollama service at {settings.OLLAMA_URL}. "
+                f"Please ensure the Ollama service is running and accessible."
+            )
+    
+    def _get_ollama_models(self) -> List[str]:
+        """Get list of models available in Ollama.
+        
+        Returns:
+            List of available model names
+        """
+        try:
+            response = requests.get(f"{settings.OLLAMA_URL}/api/tags", timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            return [model["name"] for model in data.get("models", [])]
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch models from Ollama: {e}")
+            raise
     
     def generate(self, prompt: str) -> str:
         """Generate text from a prompt.
@@ -166,9 +217,12 @@ class GenerationPipeline:
         Returns:
             List of available model names
         """
-        # For now, return the configured model
-        # In a real implementation, you might query Ollama for available models
-        return [settings.OLLAMA_MODEL, "mistral:latest", "llama2:latest", "codellama:latest"]
+        try:
+            return self._get_ollama_models()
+        except Exception as e:
+            logger.error(f"Failed to get available models: {e}")
+            # Fallback to configured model
+            return [settings.OLLAMA_MODEL]
 
 
 # Global pipeline instance

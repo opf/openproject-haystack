@@ -37,13 +37,23 @@ openproject-haystack/
 
 ### Development with Docker Compose
 ```bash
-# Start the services
+# Start the services (models will be automatically installed)
 docker-compose up --build
 
 # The API will be available at http://localhost:8000
 # Health check: GET http://localhost:8000/health
 # Text generation: POST http://localhost:8000/generate
 ```
+
+### Automatic Model Installation
+
+The application now automatically installs required Ollama models during startup:
+
+1. **Ollama Service**: Starts the Ollama server
+2. **Model Initialization**: Downloads and installs required models (default: `mistral:latest`)
+3. **API Service**: Starts only after models are ready
+
+This ensures that your application always has the required models available and eliminates the "model not found" errors.
 
 ## API Endpoints
 
@@ -135,6 +145,8 @@ pip install openai
 ## Configuration
 
 Environment variables can be set to customize the application:
+
+### Basic Configuration
 - `OLLAMA_URL` - Ollama service URL (default: http://ollama:11434)
 - `OLLAMA_MODEL` - Model to use (default: mistral:latest)
 - `GENERATION_NUM_PREDICT` - Max tokens to generate (default: 1000)
@@ -143,6 +155,55 @@ Environment variables can be set to customize the application:
 - `API_PORT` - API port (default: 8000)
 - `LOG_LEVEL` - Logging level (default: INFO, options: DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - `LOG_FORMAT` - Custom log format string (optional)
+
+### Model Management
+- `MODELS_TO_PULL` - Comma-separated list of models to download during initialization (default: mistral:latest)
+- `REQUIRED_MODELS` - Comma-separated list of models required for the application to start (default: mistral:latest)
+
+### Model Configuration Examples
+
+Create a `.env` file (see `.env.example`) to customize your setup:
+
+```bash
+# For multiple models
+MODELS_TO_PULL=mistral:latest,llama2:7b,codellama:latest
+REQUIRED_MODELS=mistral:latest,llama2:7b
+
+# For development with smaller models
+MODELS_TO_PULL=llama2:7b
+REQUIRED_MODELS=llama2:7b
+OLLAMA_MODEL=llama2:7b
+
+# For production with specific model versions
+MODELS_TO_PULL=mistral:7b-instruct-v0.2-q4_0
+REQUIRED_MODELS=mistral:7b-instruct-v0.2-q4_0
+OLLAMA_MODEL=mistral:7b-instruct-v0.2-q4_0
+```
+
+### Troubleshooting Model Issues
+
+If you encounter model-related errors:
+
+1. **Check model installation logs**:
+   ```bash
+   docker-compose logs ollama-init
+   ```
+
+2. **Verify models are available**:
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+3. **Manually pull a model** (if needed):
+   ```bash
+   docker-compose exec ollama ollama pull mistral:latest
+   ```
+
+4. **Restart with clean volumes** (if models are corrupted):
+   ```bash
+   docker-compose down -v
+   docker-compose up --build
+   ```
 
 ## Logging
 

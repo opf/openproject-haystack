@@ -54,7 +54,7 @@ class OpenProjectClient:
         url = f"{self.base_url}/api/v3/projects/{project_id}/work_packages"
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 logger.info(f"Fetching work packages from: {url}")
                 
                 response = await client.get(url, headers=self.headers)
