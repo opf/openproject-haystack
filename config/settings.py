@@ -7,6 +7,10 @@ from typing import Optional
 class Settings:
     """Application settings."""
     
+    # Logging configuration
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FORMAT: Optional[str] = os.getenv("LOG_FORMAT", None)
+    
     # Ollama configuration
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://ollama:11434")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral:latest")

@@ -28,14 +28,31 @@
 
 """Main FastAPI application for OpenProject Haystack."""
 
+import logging
 from fastapi import FastAPI
 from src.api.routes import router
+from src.utils.logging_config import setup_logging
+from config.settings import settings
+
+# Initialize logging before anything else
+setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="OpenProject Haystack",
     description="AI-powered application using Haystack and Ollama",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup."""
+    logger.info("OpenProject Haystack application starting up...")
+    logger.info(f"Log level set to: {settings.LOG_LEVEL}")
+    logger.info(f"Ollama URL: {settings.OLLAMA_URL}")
+    logger.info(f"Ollama Model: {settings.OLLAMA_MODEL}")
 
 # Include API routes
 app.include_router(router)

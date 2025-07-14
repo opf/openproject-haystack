@@ -2,8 +2,9 @@
 
 from haystack_integrations.components.generators.ollama import OllamaGenerator
 from config.settings import settings
-from src.models.schemas import ChatMessage, ChatCompletionRequest
-from typing import List, Tuple
+from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage
+from src.templates.report_templates import ProjectReportAnalyzer, ProjectStatusReportTemplate
+from typing import List, Tuple, Dict, Any
 import uuid
 import re
 
@@ -112,6 +113,52 @@ class GenerationPipeline:
         """
         # Rough approximation: 1 token ≈ 4 characters for English text
         return max(1, len(text) // 4)
+    
+    def generate_project_status_report(
+        self, 
+        project_id: str,
+        openproject_base_url: str,
+        work_packages: List[WorkPackage],
+        template_name: str = "default"
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generate a project status report from work packages.
+        
+        Args:
+            project_id: OpenProject project ID
+            openproject_base_url: Base URL of OpenProject instance
+            work_packages: List of work packages to analyze
+            template_name: Name of the report template to use
+            
+        Returns:
+            Tuple of (generated_report, analysis_data)
+        """
+        # Analyze work packages
+        analyzer = ProjectReportAnalyzer()
+        analysis = analyzer.analyze_work_packages(work_packages)
+        
+        # Create report prompt using template
+        template = ProjectStatusReportTemplate()
+        prompt = template.create_report_prompt(
+            project_id=project_id,
+            openproject_base_url=openproject_base_url,
+            work_packages=work_packages,
+            analysis=analysis
+        )
+        
+        # Generate report using LLM
+        generator = OllamaGenerator(
+            model=settings.OLLAMA_MODEL,
+            url=settings.OLLAMA_URL,
+            generation_kwargs={
+                "num_predict": 2000,  # Longer reports need more tokens
+                "temperature": 0.3,   # Lower temperature for more consistent reports
+            }
+        )
+        
+        result = generator.run(prompt)
+        report_text = result["replies"][0]
+        
+        return report_text, analysis
     
     def get_available_models(self) -> List[str]:
         """Get list of available models.

@@ -23,6 +23,9 @@ services:
       - ./config:/app/config
     ports:
       - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
     depends_on:
       - ollama
     healthcheck:

@@ -56,6 +56,9 @@ docker-compose up --build
 - `GET /v1/models` - List available models
 - `GET /v1/models/{model_id}` - Get specific model information
 
+### Project Management Endpoints
+- `POST /generate-project-status-report` - Generate project status report from OpenProject data
+
 ## OpenAI API Compatibility
 
 This application now provides full OpenAI chat completion API compatibility, allowing you to use it as a drop-in replacement for OpenAI's API in your applications.
@@ -138,6 +141,67 @@ Environment variables can be set to customize the application:
 - `GENERATION_TEMPERATURE` - Generation temperature (default: 0.7)
 - `API_HOST` - API host (default: 0.0.0.0)
 - `API_PORT` - API port (default: 8000)
+- `LOG_LEVEL` - Logging level (default: INFO, options: DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `LOG_FORMAT` - Custom log format string (optional)
+
+## Logging
+
+The application includes comprehensive logging that outputs to stdout, making it visible in Docker logs.
+
+### Log Levels
+
+- **DEBUG**: Detailed information for debugging
+- **INFO**: General information about application flow
+- **WARNING**: Warning messages for potential issues
+- **ERROR**: Error messages for failures
+
+### Viewing Logs
+
+```bash
+# View logs from Docker containers
+docker-compose logs -f api
+
+# View logs from a specific container
+docker logs openproject-haystack-api-1
+
+# Follow logs in real-time
+docker logs -f openproject-haystack-api-1
+```
+
+### Log Format
+
+Logs are formatted with timestamps, module names, and log levels:
+```
+2025-07-14 20:57:50 - src.services.openproject_client - INFO - Fetching work packages from: http://example.com/api/v3/projects/123/work_packages
+2025-07-14 20:57:50 - src.services.openproject_client - INFO - Successfully fetched 5 work packages
+```
+
+### Configuring Log Level
+
+Set the log level via environment variable:
+
+```bash
+# In docker-compose.yml
+environment:
+  - LOG_LEVEL=DEBUG
+
+# Or when running Docker directly
+docker run -e LOG_LEVEL=DEBUG your-image
+
+# For local development
+export LOG_LEVEL=DEBUG
+python3 -m uvicorn src.main:app --reload
+```
+
+### Testing Logging
+
+Use the included test script to verify logging configuration:
+
+```bash
+python3 test_logging.py
+```
+
+This will show you how different log levels appear and confirm that your `logger.info()` calls will be visible in Docker logs.
 
 ## Integration Examples
 
@@ -157,6 +221,91 @@ llm = ChatOpenAI(
 
 Any application that supports OpenAI's API can now connect to your Haystack service by simply changing the base URL to `http://localhost:8000/v1`.
 
+## Project Status Report Generation
+
+This application now includes a powerful feature to generate AI-powered project status reports from OpenProject data.
+
+### How It Works
+
+1. **Data Fetching**: The API connects to your OpenProject instance using your API key
+2. **Work Package Analysis**: Analyzes all work packages in the specified project
+3. **AI Report Generation**: Uses the LLM to generate a comprehensive status report
+4. **Structured Output**: Returns a professional report with insights and recommendations
+
+### Using the Project Status Report Endpoint
+
+```bash
+curl -X POST "http://localhost:8000/generate-project-status-report" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_OPENPROJECT_API_KEY" \
+  -d '{
+    "project_id": "1",
+    "openproject_base_url": "https://your-openproject-instance.com"
+  }'
+```
+
+### Python Example
+
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/generate-project-status-report",
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_OPENPROJECT_API_KEY"
+    },
+    json={
+        "project_id": "1",
+        "openproject_base_url": "https://your-openproject-instance.com"
+    }
+)
+
+if response.status_code == 200:
+    report_data = response.json()
+    print(f"Project: {report_data['project_id']}")
+    print(f"Work packages analyzed: {report_data['work_packages_analyzed']}")
+    print(f"Report:\n{report_data['report']}")
+```
+
+### Report Features
+
+The generated reports include:
+
+- **Executive Summary**: Overall project health and key highlights
+- **Work Package Statistics**: Completion rates, status distribution, priority breakdown
+- **Team Performance**: Workload distribution and productivity insights
+- **Timeline Analysis**: Overdue items, upcoming deadlines, schedule adherence
+- **Risk Assessment**: Identified issues and potential blockers
+- **Actionable Recommendations**: Specific steps to improve project health
+- **Next Steps**: Immediate actions and medium-term planning
+
+### Authentication & Security
+
+- Uses OpenProject API keys for secure authentication
+- API key passed via `Authorization: Bearer <token>` header
+- Comprehensive error handling for authentication and permission issues
+- No data caching - fresh data on every request
+
+### Error Handling
+
+The endpoint provides detailed error responses for various scenarios:
+
+- **401 Unauthorized**: Invalid or missing API key
+- **403 Forbidden**: Insufficient permissions for the project
+- **404 Not Found**: Project ID doesn't exist
+- **503 Service Unavailable**: OpenProject instance unreachable
+- **500 Internal Server Error**: Report generation or other internal errors
+
+### Testing the Project Status Report
+
+Use the included test script:
+
+```bash
+# Update the configuration in the script first
+python test_project_status_report.py
+```
+
 ## Features
 
 - ✅ Full OpenAI chat completion API compatibility
@@ -167,5 +316,10 @@ Any application that supports OpenAI's API can now connect to your Haystack serv
 - ✅ Model listing and information endpoints
 - ✅ Configurable generation parameters
 - ✅ Backward compatibility with original endpoints
+- ✅ **OpenProject integration for status reports**
+- ✅ **AI-powered project analysis and insights**
+- ✅ **Comprehensive work package analysis**
+- ✅ **Professional report generation**
 - 🔄 Streaming support (planned)
 - 🔄 Function calling support (planned)
+- 🔄 Multiple report templates (planned)
