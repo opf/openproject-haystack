@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   ollama:
     image: ollama/ollama
@@ -21,7 +20,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../src:/app/src
-      - ../.env:/app/.env
     ports:
       - "8000:8000"
     depends_on:
