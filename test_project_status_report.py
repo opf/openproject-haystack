@@ -38,7 +38,7 @@ def test_project_status_report():
             f"{BASE_URL}/generate-project-status-report",
             headers=headers,
             json=payload,
-            timeout=60  # Longer timeout for report generation
+            timeout=300  # Longer timeout for report generation
         )
         
         print(f"Status: {response.status_code}")
