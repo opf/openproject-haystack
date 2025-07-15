@@ -1,4 +1,3 @@
-
 #-- copyright
 # OpenProject is an open source project management software.
 # Copyright (C) the OpenProject GmbH
@@ -27,29 +26,33 @@
 # See COPYRIGHT and LICENSE files for more details.
 #++
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from haystack_integrations.components.generators.ollama import OllamaGenerator
+"""Main FastAPI application for OpenProject Haystack."""
 
-app = FastAPI()
+import logging
+from fastapi import FastAPI
+from src.api.routes import router
+from src.utils.logging_config import setup_logging
+from config.settings import settings
 
-class Prompt(BaseModel):
-    prompt: str
+# Initialize logging before anything else
+setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
 
-generator = OllamaGenerator(
-    model="mistral:latest",
-    url="http://ollama:11434",
-    generation_kwargs={"num_predict": 1000, "temperature": 0.7}
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="OpenProject Haystack",
+    description="AI-powered application using Haystack and Ollama",
+    version="1.0.0"
 )
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup."""
+    logger.info("OpenProject Haystack application starting up...")
+    logger.info(f"Log level set to: {settings.LOG_LEVEL}")
+    logger.info(f"Ollama URL: {settings.OLLAMA_URL}")
+    logger.info(f"Ollama Model: {settings.OLLAMA_MODEL}")
 
-@app.post("/generate")
-def generate(data: Prompt):
-    try:
-        result = generator.run(data.prompt)
-        return {"response": result["replies"][0]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Include API routes
+app.include_router(router)

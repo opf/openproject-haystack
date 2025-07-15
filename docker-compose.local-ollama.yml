@@ -1,0 +1,99 @@
+# Temporary docker-compose file for testing with local Ollama
+# Use this with: docker-compose -f docker-compose.local-ollama.yml up api
+
+services:
+  # Ollama services commented out for local testing
+  # ollama:
+  #   image: ollama/ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_MAX_LOADED_MODELS=1
+  #     - OLLAMA_NUM_PARALLEL=4
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 8G
+  #         cpus: '4.0'
+  #       reservations:
+  #         memory: 6G
+  #         cpus: '2.0'
+  #   healthcheck:
+  #     test: ["CMD", "/bin/ollama", "list"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 30s
+  #   networks:
+  #     - haystack-internal
+  #   command: serve
+
+  # ollama-init:
+  #   image: curlimages/curl:latest
+  #   volumes:
+  #     - ./scripts:/scripts:ro
+  #   environment:
+  #     - OLLAMA_HOST=http://ollama:11434
+  #     - MODELS_TO_PULL=${MODELS_TO_PULL:-mistral:latest}
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   networks:
+  #     - haystack-internal
+  #   command: ["/bin/sh", "/scripts/init-ollama-models.sh"]
+  #   restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=mistral:latest
+      - MODELS_TO_PULL=mistral:latest
+      - REQUIRED_MODELS=mistral:latest
+      - GENERATION_NUM_PREDICT=1000
+      - GENERATION_TEMPERATURE=0.7
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    # Dependencies removed for local Ollama testing
+    # depends_on:
+    #   - ollama
+    #   - ollama-init
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+    #  - openproject_network
+      - haystack-internal
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+
+volumes:
+  ollama-data:
+
+networks:
+  #openproject_network:
+  #  external: true
+  haystack-internal:
+    driver: bridge
