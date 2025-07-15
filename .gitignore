@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+docker/*.log
+
+# VSCode
+.vscode/
+
+# Models
+models/

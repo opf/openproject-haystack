@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+haystack
+ollama-haystack

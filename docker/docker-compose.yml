@@ -1,0 +1,46 @@
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - haystack-internal
+    command: serve
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    volumes:
+      - ../src:/app/src
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openproject_network
+      - haystack-internal
+    command: uvicorn src.app:app --host 0.0.0.0 --port 8000
+
+
+volumes:
+  ollama-data:
+
+networks:
+  openproject_network:
+    external: true
+  haystack-internal:
+    driver: bridge
+
