@@ -101,12 +101,13 @@ class OllamaEmbeddingService:
             logger.error(f"Invalid response format from Ollama: {e}")
             raise RuntimeError(f"Invalid embedding response: {e}")
     
-    def embed_texts(self, texts: List[str], show_progress: bool = False) -> np.ndarray:
-        """Generate embeddings for multiple texts.
+    def embed_texts(self, texts: List[str], show_progress: bool = False, batch_size: int = 500) -> np.ndarray:
+        """Generate embeddings for multiple texts with batch processing.
         
         Args:
             texts: List of texts to embed
             show_progress: Whether to show progress (for compatibility)
+            batch_size: Number of texts to process in each batch
             
         Returns:
             Numpy array containing all embeddings
@@ -118,26 +119,41 @@ class OllamaEmbeddingService:
         total = len(texts)
         
         if show_progress:
-            logger.info(f"Generating embeddings for {total} texts...")
+            logger.info(f"Generating embeddings for {total} texts in batches of {batch_size}...")
         
-        for i, text in enumerate(texts):
-            try:
-                embedding = self.embed_text(text)
-                embeddings.append(embedding)
-                
-                if show_progress and (i + 1) % 10 == 0:
-                    logger.info(f"Generated embeddings: {i + 1}/{total}")
+        # Process texts in batches to improve performance
+        for batch_start in range(0, total, batch_size):
+            batch_end = min(batch_start + batch_size, total)
+            batch_texts = texts[batch_start:batch_end]
+            
+            batch_embeddings = []
+            batch_failures = 0
+            
+            for i, text in enumerate(batch_texts):
+                try:
+                    embedding = self.embed_text(text)
+                    batch_embeddings.append(embedding)
                     
-            except Exception as e:
-                logger.error(f"Failed to embed text {i + 1}/{total}: {e}")
-                # Continue with other texts, but log the failure
-                continue
+                except Exception as e:
+                    logger.error(f"Failed to embed text {batch_start + i + 1}/{total}: {e}")
+                    batch_failures += 1
+                    # Continue with other texts in the batch
+                    continue
+            
+            if batch_embeddings:
+                embeddings.extend(batch_embeddings)
+            
+            if show_progress:
+                processed = batch_end
+                success_rate = ((len(batch_embeddings)) / len(batch_texts)) * 100 if batch_texts else 0
+                logger.info(f"Batch {batch_start//batch_size + 1}: Generated {len(batch_embeddings)}/{len(batch_texts)} embeddings ({success_rate:.1f}% success) - Total progress: {processed}/{total}")
         
         if not embeddings:
             raise RuntimeError("Failed to generate any embeddings")
         
         if show_progress:
-            logger.info(f"Successfully generated {len(embeddings)} embeddings")
+            success_rate = (len(embeddings) / total) * 100
+            logger.info(f"Successfully generated {len(embeddings)}/{total} embeddings ({success_rate:.1f}% success rate)")
         
         return np.array(embeddings, dtype=np.float32)
     

@@ -35,7 +35,7 @@ class DocumentChunk:
 class DocumentProcessor:
     """Processes various document formats for RAG ingestion."""
     
-    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 100):
+    def __init__(self, chunk_size: int = 2000, chunk_overlap: int = 200):
         """Initialize document processor.
         
         Args:
@@ -260,11 +260,9 @@ class DocumentProcessor:
                 'full_path': file_path,
                 'processed_at': datetime.now().isoformat()
             })
-            logger.info(f"metadata: {metadata}")
             
             # Split text into chunks
             text_chunks = self._split_text(text)
-            logger.info(f"text_chunks: {text_chunks}")
             
             for chunk_text in text_chunks:
                 chunk_id = f"{os.path.basename(file_path)}_{chunk_counter}"

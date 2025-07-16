@@ -74,16 +74,17 @@ class DocumentManager:
         processed_count = 0
         total_chunks = 0
         
-        for doc_path in documents:
+        for i, doc_path in enumerate(documents):
             try:
                 if self._should_process_document(doc_path):
-                    logger.info(f"Processing document: {doc_path}")
+                    logger.info(f"Processing document {i+1}/{len(documents)}: {doc_path}")
                     
                     # Process document into chunks
                     chunks = self.document_processor.process_document(doc_path)
                     
                     if chunks:
-                        # Add chunks to vector store
+                        # Add chunks to vector store with progress tracking
+                        logger.info(f"Adding {len(chunks)} chunks to vector store...")
                         self.vector_store.add_documents(chunks)
                         
                         # Update document index
@@ -92,9 +93,11 @@ class DocumentManager:
                         processed_count += 1
                         total_chunks += len(chunks)
                         
-                        logger.info(f"Added {len(chunks)} chunks from {doc_path}")
+                        logger.info(f"Successfully processed document {i+1}/{len(documents)}: {len(chunks)} chunks added")
                     else:
                         logger.warning(f"No chunks created from {doc_path}")
+                else:
+                    logger.info(f"Skipping document {i+1}/{len(documents)} (already processed): {doc_path}")
                 
             except Exception as e:
                 logger.error(f"Error processing document {doc_path}: {e}")
