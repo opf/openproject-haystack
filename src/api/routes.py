@@ -106,6 +106,138 @@ def create_chat_completion(request: ChatCompletionRequest):
         )
 
 
+# RAG Management endpoints
+
+@router.post("/rag/initialize")
+def initialize_rag_system():
+    """Initialize the RAG system by loading PMFlex documents.
+    
+    Returns:
+        Initialization status and results
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        result = rag_pipeline.initialize()
+        
+        return {
+            "status": "success",
+            "message": "RAG system initialization completed",
+            "result": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error initializing RAG system: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to initialize RAG system: {str(e)}",
+                    "type": "rag_initialization_error",
+                    "code": "rag_init_failed"
+                }
+            }
+        )
+
+
+@router.get("/rag/status")
+def get_rag_status():
+    """Get the current status of the RAG system.
+    
+    Returns:
+        RAG system status and statistics
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        stats = rag_pipeline.get_pipeline_stats()
+        validation = rag_pipeline.validate_setup()
+        
+        return {
+            "status": "success",
+            "pipeline_stats": stats,
+            "validation": validation
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting RAG status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to get RAG status: {str(e)}",
+                    "type": "rag_status_error",
+                    "code": "rag_status_failed"
+                }
+            }
+        )
+
+
+@router.post("/rag/refresh")
+def refresh_rag_documents():
+    """Refresh the RAG document index.
+    
+    Returns:
+        Refresh operation results
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        result = rag_pipeline.refresh_documents()
+        
+        return {
+            "status": "success",
+            "message": "Document refresh completed",
+            "result": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error refreshing RAG documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to refresh documents: {str(e)}",
+                    "type": "rag_refresh_error",
+                    "code": "rag_refresh_failed"
+                }
+            }
+        )
+
+
+@router.post("/rag/search")
+def search_rag_documents(query: str, max_results: int = 5):
+    """Search RAG documents for specific information.
+    
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return
+        
+    Returns:
+        Search results from RAG system
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        results = rag_pipeline.search_documents(query, max_results)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "results": results,
+            "total_results": len(results)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching RAG documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to search documents: {str(e)}",
+                    "type": "rag_search_error",
+                    "code": "rag_search_failed"
+                }
+            }
+        )
+
+
 # Project Status Report endpoint
 
 @router.post("/generate-project-status-report", response_model=ProjectStatusReportResponse)
@@ -201,6 +333,7 @@ async def generate_project_status_report(
         try:
             report_text, analysis = generation_pipeline.generate_project_status_report(
                 project_id=str(project_id),
+                project_type=project_type,
                 openproject_base_url=base_url,
                 work_packages=work_packages
             )

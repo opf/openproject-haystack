@@ -257,6 +257,122 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         )
     
     @staticmethod
+    def create_enhanced_report_prompt(
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        work_packages: List[WorkPackage],
+        analysis: Dict[str, Any],
+        pmflex_context: str
+    ) -> str:
+        """Create an enhanced prompt with PMFlex RAG context.
+        
+        Args:
+            project_id: Project identifier
+            project_type: Type of project (portfolio, program, project)
+            openproject_base_url: Base URL of OpenProject instance
+            work_packages: List of work packages
+            analysis: Analysis results from ProjectReportAnalyzer
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Complete formatted prompt string with RAG enhancement
+        """
+        template = ProjectStatusReportTemplate.get_enhanced_template()
+        
+        # Format analysis data as JSON for better structure
+        analysis_json = json.dumps(analysis, indent=2, default=str)
+        
+        # Create work packages summary
+        work_packages_summary = ProjectStatusReportTemplate.format_work_packages_summary(work_packages)
+        
+        return template.format(
+            project_id=project_id,
+            project_type=project_type,
+            openproject_base_url=openproject_base_url,
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            total_work_packages=len(work_packages),
+            analysis_data=analysis_json,
+            work_packages_summary=work_packages_summary,
+            pmflex_context=pmflex_context or "No PMFlex context available."
+        )
+    
+    @staticmethod
+    def get_enhanced_template() -> str:
+        """Get the enhanced project status report template with PMFlex context.
+        
+        Returns:
+            Template string for LLM prompt with RAG enhancement
+        """
+        return """
+You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report based on work package data from OpenProject, enhanced with PMFlex templates and best practices.
+
+PROJECT INFORMATION:
+- Project ID: {project_id}
+- Project Type: {project_type}
+- OpenProject URL: {openproject_base_url}
+- Report Generated: {generated_at}
+- Total Work Packages Analyzed: {total_work_packages}
+
+WORK PACKAGE ANALYSIS:
+{analysis_data}
+
+WORK PACKAGE DETAILS:
+{work_packages_summary}
+
+PMFLEX CONTEXT AND TEMPLATES:
+{pmflex_context}
+
+Based on the project data, analysis, and PMFlex methodology context above, generate a comprehensive project status report that follows PMFlex standards and includes:
+
+1. **Executive Summary (PMFlex Compliant)**
+   - Overall project health assessment according to PMFlex criteria
+   - Key achievements and progress highlights
+   - Critical issues or risks identified with PMFlex risk categories
+   - Compliance status with German federal government standards
+
+2. **Work Package Analysis (PMFlex Framework)**
+   - Total work packages and their distribution by status
+   - Completion rate and progress metrics aligned with PMFlex KPIs
+   - Priority breakdown and focus areas according to PMFlex methodology
+   - Quality gates and milestone assessments
+
+3. **Team Performance and Resource Management**
+   - Workload distribution among team members
+   - Individual and team productivity insights
+   - Resource allocation observations and optimization recommendations
+   - Capacity planning according to PMFlex guidelines
+
+4. **Timeline and Schedule Management**
+   - Overdue items and their impact on project timeline
+   - Upcoming deadlines and critical path analysis
+   - Schedule adherence assessment using PMFlex metrics
+   - Milestone tracking and phase gate readiness
+
+5. **Risk Management and Governance**
+   - Risk assessment using PMFlex risk management framework
+   - Compliance with governance requirements
+   - Quality assurance status and recommendations
+   - Escalation procedures and decision points
+
+6. **Recommendations and Action Items**
+   - Actionable steps to improve project health according to PMFlex best practices
+   - Risk mitigation strategies aligned with federal standards
+   - Resource reallocation suggestions based on PMFlex methodology
+   - Process improvement recommendations
+
+7. **Next Steps and Planning**
+   - Immediate actions required with responsible parties
+   - Medium-term planning considerations and dependencies
+   - Success metrics to monitor according to PMFlex KPIs
+   - Reporting schedule and stakeholder communication plan
+
+Format the report in a professional manner that complies with German federal government documentation standards. Use clear structure, bullet points, and actionable language. Incorporate PMFlex terminology and methodology where appropriate. Focus on insights that would be valuable for project managers, stakeholders, and governance bodies familiar with PMFlex standards.
+
+Ensure the report reflects PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration.
+"""
+    
+    @staticmethod
     def get_custom_template(template_name: str) -> str:
         """Get a custom report template by name.
         

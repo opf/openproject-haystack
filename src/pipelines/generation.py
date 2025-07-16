@@ -168,14 +168,16 @@ class GenerationPipeline:
     def generate_project_status_report(
         self, 
         project_id: str,
+        project_type: str,
         openproject_base_url: str,
         work_packages: List[WorkPackage],
         template_name: str = "default"
     ) -> Tuple[str, Dict[str, Any]]:
-        """Generate a project status report from work packages.
+        """Generate a project status report from work packages with RAG enhancement.
         
         Args:
             project_id: OpenProject project ID
+            project_type: Type of project (portfolio, program, project)
             openproject_base_url: Base URL of OpenProject instance
             work_packages: List of work packages to analyze
             template_name: Name of the report template to use
@@ -187,13 +189,29 @@ class GenerationPipeline:
         analyzer = ProjectReportAnalyzer()
         analysis = analyzer.analyze_work_packages(work_packages)
         
-        # Create report prompt using template
+        # Enhance with RAG context
+        try:
+            from src.pipelines.rag_pipeline import rag_pipeline
+            rag_context = rag_pipeline.enhance_project_report_context(
+                project_id=project_id,
+                project_type=project_type,
+                work_packages=work_packages,
+                analysis=analysis
+            )
+            logger.info("Enhanced report with RAG context")
+        except Exception as e:
+            logger.warning(f"Could not enhance with RAG context: {e}")
+            rag_context = {'pmflex_context': ''}
+        
+        # Create report prompt using template with RAG enhancement
         template = ProjectStatusReportTemplate()
-        prompt = template.create_report_prompt(
+        prompt = template.create_enhanced_report_prompt(
             project_id=project_id,
+            project_type=project_type,
             openproject_base_url=openproject_base_url,
             work_packages=work_packages,
-            analysis=analysis
+            analysis=analysis,
+            pmflex_context=rag_context.get('pmflex_context', '')
         )
         
         # Generate report using LLM
@@ -201,13 +219,16 @@ class GenerationPipeline:
             model=settings.OLLAMA_MODEL,
             url=settings.OLLAMA_URL,
             generation_kwargs={
-                "num_predict": 2000,  # Longer reports need more tokens
+                "num_predict": 2500,  # Longer reports with RAG context need more tokens
                 "temperature": 0.3,   # Lower temperature for more consistent reports
             }
         )
         
         result = generator.run(prompt)
         report_text = result["replies"][0]
+        
+        # Add RAG context info to analysis
+        analysis['rag_context'] = rag_context
         
         return report_text, analysis
     
