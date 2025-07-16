@@ -164,12 +164,27 @@ class SuggestionPipeline:
         except TypeError:
             llm_response = generation_pipeline.generate(prompt)
         try:
+            # Try parsing as a JSON array first
             raw_candidates = json.loads(llm_response)
-            candidates = [self._dict_to_candidate(c, sub_projects) for c in raw_candidates]
-        except Exception as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}\nResponse: {llm_response}")
-            candidates = self._parse_candidates_from_text(llm_response, sub_projects)
-        # Only keep candidates with score > 70
+            if isinstance(raw_candidates, dict):
+                raw_candidates = [raw_candidates]
+        except Exception:
+            # Try parsing as multiple JSON objects separated by newlines
+            raw_candidates = []
+            for line in llm_response.splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        obj = json.loads(line)
+                        raw_candidates.append(obj)
+                    except Exception:
+                        continue
+            if not raw_candidates:
+                logger.error(f"Failed to parse LLM response as JSON: {llm_response}")
+                candidates = self._parse_candidates_from_text(llm_response, sub_projects)
+                candidates = [c for c in candidates if c.score is not None and c.score > 70]
+                return candidates, llm_response
+        candidates = [self._dict_to_candidate(c, sub_projects) for c in raw_candidates]
         candidates = [c for c in candidates if c.score is not None and c.score > 70]
         return candidates, llm_response
 

@@ -345,8 +345,7 @@ def get_model(model_id: str):
             }
         )
 
-
-@router.post("/suggest", response_model=SuggestResponse)
+@router.post("/evaluate-projects-similarities", response_model=SuggestResponse)
 def suggest_endpoint(request: SuggestRequest):
     try:
         result = pipeline.suggest(request.project_id)
