@@ -179,7 +179,7 @@ class OpenProjectClient:
         """
         url = f"{self.base_url}/api/v3/projects/{project_id}"
         headers = self.headers.copy() # Use a copy to avoid modifying self.headers
-        logger.info(f"Sending request to {url} with headers: {headers}")
+        logger.info(f"Sending request to {url} with headers: [REDACTED]")
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:

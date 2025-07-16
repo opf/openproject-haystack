@@ -156,34 +156,48 @@ class SuggestionPipeline:
         return '\n'.join(prompt)
 
     def _llm_score_candidates(self, portfolio_project: dict, sub_projects: List[dict]) -> tuple[list[Candidate], str]:
-        """Call the LLM and parse the response into Candidate objects. Only keep candidates with score > 70."""
         prompt = self._build_suggestion_prompt(portfolio_project, sub_projects)
         logger.info(f"LLM prompt for suggestion pipeline:\n{prompt}")
         try:
             llm_response = generation_pipeline.generate(prompt)
         except TypeError:
             llm_response = generation_pipeline.generate(prompt)
+
+        raw_candidates = []
+        # 1. Try parsing as a JSON array
         try:
-            # Try parsing as a JSON array first
             raw_candidates = json.loads(llm_response)
             if isinstance(raw_candidates, dict):
                 raw_candidates = [raw_candidates]
         except Exception:
-            # Try parsing as multiple JSON objects separated by newlines
-            raw_candidates = []
-            for line in llm_response.splitlines():
-                line = line.strip()
-                if line:
+            # 2. Try wrapping in brackets and removing trailing commas
+            try:
+                fixed = llm_response.strip()
+                if not fixed.startswith("["):
+                    fixed = "[" + fixed
+                if not fixed.endswith("]"):
+                    fixed = fixed + "]"
+                fixed = re.sub(r",\s*]", "]", fixed)
+                raw_candidates = json.loads(fixed)
+                if isinstance(raw_candidates, dict):
+                    raw_candidates = [raw_candidates]
+            except Exception:
+                # 3. Use regex to extract all JSON objects
+                objects = re.findall(r"{[^{}]*}", llm_response, re.DOTALL)
+                # Ensure raw_candidates is a list
+                if not isinstance(raw_candidates, list):
+                    raw_candidates = []
+                for obj in objects:
                     try:
-                        obj = json.loads(line)
-                        raw_candidates.append(obj)
+                        raw_candidates.append(json.loads(obj))
                     except Exception:
                         continue
-            if not raw_candidates:
-                logger.error(f"Failed to parse LLM response as JSON: {llm_response}")
-                candidates = self._parse_candidates_from_text(llm_response, sub_projects)
-                candidates = [c for c in candidates if c.score is not None and c.score > 70]
-                return candidates, llm_response
+                if not raw_candidates:
+                    logger.error(f"Failed to parse LLM response as JSON: {llm_response}")
+                    candidates = self._parse_candidates_from_text(llm_response, sub_projects)
+                    candidates = [c for c in candidates if c.score is not None and c.score > 70]
+                    return candidates, llm_response
+
         candidates = [self._dict_to_candidate(c, sub_projects) for c in raw_candidates]
         candidates = [c for c in candidates if c.score is not None and c.score > 70]
         return candidates, llm_response
