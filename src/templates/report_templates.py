@@ -305,7 +305,7 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             Template string for LLM prompt with RAG enhancement
         """
         return """
-You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report based on work package data from OpenProject, enhanced with PMFlex templates and best practices.
+You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report (Projektstatusbericht) based on work package data from OpenProject, following the official German PMFlex template structure.
 
 PROJECT INFORMATION:
 - Project ID: {project_id}
@@ -323,53 +323,63 @@ WORK PACKAGE DETAILS:
 PMFLEX CONTEXT AND TEMPLATES:
 {pmflex_context}
 
-Based on the project data, analysis, and PMFlex methodology context above, generate a comprehensive project status report that follows PMFlex standards and includes:
+Based on the project data, analysis, and PMFlex methodology context above, generate a project status report (Projektstatusbericht) that follows the official German PMFlex template structure:
 
-1. **Executive Summary (PMFlex Compliant)**
-   - Overall project health assessment according to PMFlex criteria
-   - Key achievements and progress highlights
-   - Critical issues or risks identified with PMFlex risk categories
-   - Compliance status with German federal government standards
+## REPORT STRUCTURE (Generate in this exact order):
 
-2. **Work Package Analysis (PMFlex Framework)**
-   - Total work packages and their distribution by status
-   - Completion rate and progress metrics aligned with PMFlex KPIs
-   - Priority breakdown and focus areas according to PMFlex methodology
-   - Quality gates and milestone assessments
+### 1. **ZUSAMMENFASSUNG (Summary)**
+Start with a comprehensive summary paragraph that provides:
+- Brief description of the current project status (Kurze Beschreibung des aktuellen Status des Projekts)
+- Overall project health assessment according to PMFlex criteria
+- Key achievements and progress highlights from the reporting period
+- Critical issues or risks that require attention
+- Overall trajectory and outlook for the project
 
-3. **Team Performance and Resource Management**
-   - Workload distribution among team members
-   - Individual and team productivity insights
-   - Resource allocation observations and optimization recommendations
-   - Capacity planning according to PMFlex guidelines
+### 2. **STATUSÜBERSICHT (Status Overview)**
+Provide a status assessment using the PMFlex traffic light system:
+- **Gesamtstatus (Overall Status)**: Assess as "Im Plan" (Green), "Teilweise kritisch" (Yellow), or "Kritisch" (Red)
+- **Zeit (Time/Schedule)**: Schedule adherence assessment
+- **Kosten (Costs)**: Budget and cost status (if available from work package data)
+- **Risiko (Risk)**: Risk level assessment based on work package analysis
 
-4. **Timeline and Schedule Management**
-   - Overdue items and their impact on project timeline
-   - Upcoming deadlines and critical path analysis
-   - Schedule adherence assessment using PMFlex metrics
-   - Milestone tracking and phase gate readiness
+Include the reporting period (Berichtsperiode) based on the work package data timeframe.
 
-5. **Risk Management and Governance**
-   - Risk assessment using PMFlex risk management framework
-   - Compliance with governance requirements
-   - Quality assurance status and recommendations
-   - Escalation procedures and decision points
+### 3. **ABGESCHLOSSENE AKTIVITÄTEN UND MEILENSTEINE (Completed Activities and Milestones)**
+List completed work packages and achievements:
+- Work packages completed during the reporting period (with completion percentage = 100%)
+- Key milestones reached
+- Significant deliverables completed
+- Quality gates passed
+- Use bullet points with specific work package IDs and titles where available
 
-6. **Recommendations and Action Items**
-   - Actionable steps to improve project health according to PMFlex best practices
-   - Risk mitigation strategies aligned with federal standards
-   - Resource reallocation suggestions based on PMFlex methodology
-   - Process improvement recommendations
+### 4. **NÄCHSTE AKTIVITÄTEN UND MEILENSTEINE (Next Activities and Milestones)**
+Outline upcoming work and priorities:
+- Work packages scheduled for the next period
+- Upcoming milestones and deadlines
+- Critical path activities
+- Dependencies that need attention
+- Resource requirements for upcoming activities
+- Use bullet points with specific work package IDs and due dates where available
 
-7. **Next Steps and Planning**
-   - Immediate actions required with responsible parties
-   - Medium-term planning considerations and dependencies
-   - Success metrics to monitor according to PMFlex KPIs
-   - Reporting schedule and stakeholder communication plan
+### 5. **ENTSCHEIDUNGSBEDARF (Decision Requirements)**
+Identify issues requiring decisions or escalation:
+- Blocked work packages requiring management intervention
+- Resource conflicts or capacity issues
+- Scope changes or requirement clarifications needed
+- Risk mitigation decisions required
+- Budget or timeline adjustments needed
+- Stakeholder decisions pending
+- Use bullet points with clear action items and responsible parties
 
-Format the report in a professional manner that complies with German federal government documentation standards. Use clear structure, bullet points, and actionable language. Incorporate PMFlex terminology and methodology where appropriate. Focus on insights that would be valuable for project managers, stakeholders, and governance bodies familiar with PMFlex standards.
+## FORMATTING REQUIREMENTS:
+- Use German PMFlex terminology throughout
+- Structure with clear headings and bullet points
+- Include specific work package references where relevant
+- Maintain professional tone suitable for German federal government standards
+- Focus on actionable insights and clear status communication
+- Ensure compliance with PMFlex documentation standards
 
-Ensure the report reflects PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration.
+The report should reflect PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration. Prioritize clarity and actionable information for project stakeholders and governance bodies.
 """
     
     @staticmethod
