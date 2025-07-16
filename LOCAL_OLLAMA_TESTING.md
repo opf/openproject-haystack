@@ -25,7 +25,7 @@ This document explains how to test your application with your local Ollama insta
 ollama serve  # if not already running
 
 # Start only the API service with local Ollama configuration
-docker-compose -f docker-compose.local-ollama.yml up --build api
+docker compose -f docker-compose.local-ollama.yml up --build api
 ```
 
 #### Test with Docker Ollama
@@ -34,7 +34,7 @@ docker-compose -f docker-compose.local-ollama.yml up --build api
 mv .env .env.backup
 
 # Start full Docker stack
-docker-compose up --build
+docker compose up --build
 ```
 
 ## Files Created for Testing
@@ -120,8 +120,8 @@ docker-compose up --build
 
 ### Environment Variable Issues
 - Ensure the `.env` file exists and contains `OLLAMA_URL=http://host.docker.internal:11434`
-- The docker-compose file now includes both `env_file` and explicit `environment` settings
-- Check container logs: `docker-compose -f docker-compose.local-ollama.yml logs api`
+- The docker compose file now includes both `env_file` and explicit `environment` settings
+- Check container logs: `docker compose -f docker-compose.local-ollama.yml logs api`
 
 ### Permission Issues
 - Make script executable: `chmod +x test-local-ollama.sh`

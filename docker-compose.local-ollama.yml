@@ -1,5 +1,5 @@
-# Temporary docker-compose file for testing with local Ollama
-# Use this with: docker-compose -f docker-compose.local-ollama.yml up api
+# Temporary docker compose file for testing with local Ollama
+# Use this with: docker compose -f docker-compose.local-ollama.yml up api
 
 services:
   # Ollama services commented out for local testing

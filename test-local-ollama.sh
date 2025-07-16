@@ -38,11 +38,11 @@ test_local_ollama() {
     echo "  OLLAMA_MODEL=mistral:latest"
     
     # Stop any running containers first
-    docker-compose down 2>/dev/null || true
-    docker-compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
+    docker compose down 2>/dev/null || true
+    docker compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
     
     # Start with local Ollama configuration
-    docker-compose -f docker-compose.local-ollama.yml up --build api
+    docker compose -f docker-compose.local-ollama.yml up --build api
 }
 
 # Function to test with Docker Ollama
@@ -60,10 +60,10 @@ test_docker_ollama() {
     echo "📦 Starting full Docker stack with Ollama container..."
     
     # Stop any running containers first
-    docker-compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
+    docker compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
     
     # Start with original Docker configuration
-    docker-compose up --build
+    docker compose up --build
 }
 
 # Function to restore original configuration
@@ -73,8 +73,8 @@ restore_config() {
     echo "----------------------------------"
     
     # Stop all containers
-    docker-compose down 2>/dev/null || true
-    docker-compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
+    docker compose down 2>/dev/null || true
+    docker compose -f docker-compose.local-ollama.yml down 2>/dev/null || true
     
     # Restore .env if it was backed up
     if [ -f ".env.backup" ]; then

@@ -38,7 +38,7 @@ openproject-haystack/
 ### Development with Docker Compose
 ```bash
 # Start the services (models will be automatically installed)
-docker-compose up --build
+docker compose up --build
 
 # The API will be available at http://localhost:8000
 # Health check: GET http://localhost:8000/health
@@ -186,7 +186,7 @@ If you encounter model-related errors:
 
 1. **Check model installation logs**:
    ```bash
-   docker-compose logs ollama-init
+   docker compose logs ollama-init
    ```
 
 2. **Verify models are available**:
@@ -196,13 +196,13 @@ If you encounter model-related errors:
 
 3. **Manually pull a model** (if needed):
    ```bash
-   docker-compose exec ollama ollama pull mistral:latest
+   docker compose exec ollama ollama pull mistral:latest
    ```
 
 4. **Restart with clean volumes** (if models are corrupted):
    ```bash
-   docker-compose down -v
-   docker-compose up --build
+   docker compose down -v
+   docker compose up --build
    ```
 
 ## Logging
@@ -220,7 +220,7 @@ The application includes comprehensive logging that outputs to stdout, making it
 
 ```bash
 # View logs from Docker containers
-docker-compose logs -f api
+docker compose logs -f api
 
 # View logs from a specific container
 docker logs openproject-haystack-api-1
