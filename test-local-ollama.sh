@@ -34,8 +34,9 @@ test_local_ollama() {
     echo "📦 Starting API service with local Ollama configuration..."
     echo "Using docker-compose.local-ollama.yml and .env file"
     echo "Environment variables:"
-    echo "  OLLAMA_URL=http://host.docker.internal:11434"
+    echo "  OLLAMA_URL=http://localhost:11434"
     echo "  OLLAMA_MODEL=mistral:latest"
+    echo "  NETWORK_MODE=host (Linux compatible)"
     
     # Stop any running containers first
     docker compose down 2>/dev/null || true

@@ -47,8 +47,8 @@ docker compose up --build
 ## Configuration Details
 
 ### Local Ollama Configuration
-- **Ollama URL**: `http://host.docker.internal:11434`
-- **Network**: Uses Docker's `host.docker.internal` to access host machine
+- **Ollama URL**: `http://localhost:11434`
+- **Network**: Uses `network_mode: host` for Linux compatibility
 - **Dependencies**: Removes Docker Ollama service dependencies
 
 ### Performance Benefits
@@ -113,13 +113,13 @@ docker compose up --build
 - Check port 11434 is available: `lsof -i :11434`
 - Verify models are available: `ollama list`
 
-### Docker Network Issues
-- On some systems, use `host.docker.internal`
-- On Linux, you might need `172.17.0.1` or `localhost`
-- If you get "Failed to resolve 'ollama'" errors, the environment variables aren't being loaded properly
+### Docker Network Issues (Linux Specific)
+- **Fixed**: Now uses `network_mode: host` which eliminates Docker network isolation
+- **Previous issue**: `host.docker.internal` doesn't work on Linux systems
+- **Solution**: Direct localhost access with host networking mode
 
 ### Environment Variable Issues
-- Ensure the `.env` file exists and contains `OLLAMA_URL=http://host.docker.internal:11434`
+- Ensure the `.env` file exists and contains `OLLAMA_URL=http://localhost:11434`
 - The docker compose file now includes both `env_file` and explicit `environment` settings
 - Check container logs: `docker compose -f docker-compose.local-ollama.yml logs api`
 
@@ -128,7 +128,13 @@ docker compose up --build
 
 ### Connection Issues
 - Test local Ollama directly: `curl http://localhost:11434/api/tags`
-- Test from container perspective: `docker run --rm curlimages/curl curl http://host.docker.internal:11434/api/tags`
+- With host networking, the container can directly access localhost services
+- If still having issues, ensure no firewall is blocking port 11434
+
+### Linux-Specific Notes
+- **Host networking**: Container shares the host's network stack
+- **Port conflicts**: Ensure port 8000 is not already in use on your system
+- **Firewall**: Some Linux distributions may require firewall configuration for localhost access
 
 ## Cleanup
 
