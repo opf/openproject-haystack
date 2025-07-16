@@ -64,31 +64,37 @@ class SuggestionPipeline:
             raise
 
     def _get_sub_projects_parallel_with_fallback(self, project_id: str) -> List[Dict[str, Any]]:
-        """Fetch sub-projects (children) in parallel, with fallback to all projects if needed."""
-        project_info = asyncio.run(self.openproject_client.get_project_info(project_id))
-        children_links = project_info.get("_links", {}).get("children", [])
-        sub_projects = []
-        if children_links:
-            def fetch_child(child):
-                href = child.get("href")
-                if href:
-                    child_id = href.rstrip("/").split("/")[-1]
-                    try:
-                        return asyncio.run(self.openproject_client.get_project_info(child_id))
-                    except Exception as e:
-                        logger.error(f"Failed to fetch sub-project {child_id}: {e}")
-                return None
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-                results = list(executor.map(fetch_child, children_links))
-            sub_projects = [sp for sp in results if sp is not None]
-        else:
-            logger.info("No children found in _links. Fetching all projects and filtering by parent.")
-            all_projects = asyncio.run(self.openproject_client.get_all_projects())
-            sub_projects = [
-                p for p in all_projects
-                if p.get("_links", {}).get("parent", {}).get("href") == f"/api/v3/projects/{project_id}"
-            ]
-        return sub_projects
+        """Recursively traverse all descendants of the portfolio, skipping Teilportfolio but traversing through them to reach programs and projects. Collect all programs and projects under the portfolio, regardless of depth, but exclude any with 'Teilportfolio' in the name from the results (but not from traversal)."""
+        all_projects = asyncio.run(self.openproject_client.get_all_projects())
+        for p in all_projects:
+            logger.debug(f"Project {p.get('id')}: _links = {p.get('_links')}")
+        id_to_project = {str(p.get('id')): p for p in all_projects}
+        # Build parent->children map
+        parent_to_children = {}
+        for p in all_projects:
+            parent_href = p.get('_links', {}).get('parent', {}).get('href')
+            if parent_href:
+                parent_id = parent_href.rstrip('/').split('/')[-1]
+                parent_to_children.setdefault(parent_id, []).append(p)
+        # Recursive traversal
+        def collect_candidates(current_id):
+            candidates = []
+            children = parent_to_children.get(str(current_id), [])
+            for child in children:
+                name = child.get('name') or ''
+                project_type = child.get('projectType')
+                if 'Teilportfolio' in name:
+                    # Skip as candidate, but traverse its children
+                    candidates.extend(collect_candidates(child.get('id')))
+                elif project_type in ('program', 'project'):
+                    candidates.append(child)
+                    # Also traverse children in case of nested programs
+                    candidates.extend(collect_candidates(child.get('id')))
+                else:
+                    # Traverse children for any other type
+                    candidates.extend(collect_candidates(child.get('id')))
+            return candidates
+        return collect_candidates(project_id)
 
     def _extract_custom_fields(self, project_info: dict) -> dict:
         """Extract custom fields from a project info dict, using only the 'raw' value if present."""
@@ -142,15 +148,15 @@ class SuggestionPipeline:
                 prompt.append("   Work packages:")
                 prompt.extend([f"     - {wp_name}" for wp_name in sp_wp_names])
         prompt.append(
-            "For each sub-project, rate its suitability as a portfolio candidate for the above portfolio project "
-            "on a scale from 0 to 100 (integer), and briefly explain your reasoning. "
-            "If there is not enough information to make a judgment, honestly say so and do not continue. "
-            "Return a JSON list of objects with fields: project_id, score, reason."
+            "For all projects and programs, rate its suitability as a portfolio candidate for the above portfolio "
+            "on a scale from 0 to 100 (integer), and briefly explain your reasoning (1-2 sentences). "
+            "Only return projects that have a value above 70. "
+            "Return a JSON list of objects with fields: project_id, score, reason"
         )
         return '\n'.join(prompt)
 
-    def _llm_score_candidates(self, portfolio_project: dict, sub_projects: List[dict]) -> tuple[List[Candidate], str]:
-        """Call the LLM and parse the response into Candidate objects."""
+    def _llm_score_candidates(self, portfolio_project: dict, sub_projects: List[dict]) -> tuple[list[Candidate], str]:
+        """Call the LLM and parse the response into Candidate objects. Only keep candidates with score > 70."""
         prompt = self._build_suggestion_prompt(portfolio_project, sub_projects)
         logger.info(f"LLM prompt for suggestion pipeline:\n{prompt}")
         try:
@@ -163,6 +169,8 @@ class SuggestionPipeline:
         except Exception as e:
             logger.error(f"Failed to parse LLM response as JSON: {e}\nResponse: {llm_response}")
             candidates = self._parse_candidates_from_text(llm_response, sub_projects)
+        # Only keep candidates with score > 70
+        candidates = [c for c in candidates if c.score is not None and c.score > 70]
         return candidates, llm_response
 
     def _dict_to_candidate(self, c: dict, sub_projects: List[dict]) -> Candidate:
@@ -228,11 +236,11 @@ class SuggestionPipeline:
         return candidates
 
     def _candidate_to_dict(self, c: Candidate) -> dict:
-        """Convert a Candidate dataclass to a dict for API response."""
+        """Convert a Candidate dataclass to a dict for API response. Include name, project_id, score, and reason."""
         return {
-            "project_id": c.project_id,
             "name": c.name,
             "score": c.score,
+            "project_id": c.project_id,
             "reason": c.reason
         }
 
