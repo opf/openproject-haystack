@@ -1,6 +1,6 @@
 """API routes for the Haystack application."""
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException
 from src.models.schemas import (
     GenerationRequest, GenerationResponse, HealthResponse,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatChoice,
@@ -11,7 +11,6 @@ from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
 import uuid
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -111,70 +110,47 @@ def create_chat_completion(request: ChatCompletionRequest):
 
 @router.post("/generate-project-status-report", response_model=ProjectStatusReportResponse)
 async def generate_project_status_report(
-    request: ProjectStatusReportRequest,
-    authorization: Optional[str] = Header(None)
+    request: ProjectStatusReportRequest
 ):
     """Generate a project status report from OpenProject work packages.
     
     Args:
-        request: Project status report request with project ID and base URL
-        authorization: Bearer token for OpenProject API authentication
+        request: Project status report request with project info and OpenProject instance info
         
     Returns:
         Generated project status report
     """
     try:
-        # Validate authorization header
-        if not authorization:
+        # Extract values from the new request structure
+        project_id = request.project.id
+        project_type = request.project.type
+        base_url = request.openproject.base_url
+        user_token = request.openproject.user_token
+        
+        # Validate user token
+        if not user_token:
             raise HTTPException(
                 status_code=401,
                 detail={
                     "error": {
-                        "message": "Authorization header is required",
+                        "message": "OpenProject user token is required",
                         "type": "authentication_error",
-                        "code": "missing_authorization"
-                    }
-                }
-            )
-        
-        # Extract API key from Bearer token
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "Authorization header must be in format 'Bearer <token>'",
-                        "type": "authentication_error",
-                        "code": "invalid_authorization_format"
-                    }
-                }
-            )
-        
-        api_key = authorization[7:]  # Remove "Bearer " prefix
-        
-        if not api_key:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "API key cannot be empty",
-                        "type": "authentication_error",
-                        "code": "empty_api_key"
+                        "code": "missing_user_token"
                     }
                 }
             )
         
         # Initialize OpenProject client
         openproject_client = OpenProjectClient(
-            base_url=request.openproject_base_url,
-            api_key=api_key
+            base_url=base_url,
+            api_key=user_token
         )
         
-        logger.info(f"Generating project status report for project {request.project_id}")
+        logger.info(f"Generating project status report for project {project_id} (type: {project_type})")
         
         # Fetch work packages from OpenProject
         try:
-            work_packages = await openproject_client.get_work_packages(request.project_id)
+            work_packages = await openproject_client.get_work_packages(str(project_id))
             logger.info(f"Fetched {len(work_packages)} work packages")
         except OpenProjectAPIError as e:
             logger.error(f"OpenProject API error: {e.message}")
@@ -224,18 +200,19 @@ async def generate_project_status_report(
         # Generate project status report using LLM
         try:
             report_text, analysis = generation_pipeline.generate_project_status_report(
-                project_id=request.project_id,
-                openproject_base_url=request.openproject_base_url,
+                project_id=str(project_id),
+                openproject_base_url=base_url,
                 work_packages=work_packages
             )
             
-            logger.info(f"Successfully generated project status report for project {request.project_id}")
+            logger.info(f"Successfully generated project status report for project {project_id}")
             
             return ProjectStatusReportResponse(
-                project_id=request.project_id,
+                project_id=project_id,
+                project_type=project_type,
                 report=report_text,
                 work_packages_analyzed=len(work_packages),
-                openproject_base_url=request.openproject_base_url
+                openproject_base_url=base_url
             )
             
         except Exception as e:

@@ -95,10 +95,22 @@ class ErrorResponse(BaseModel):
 
 # Project Status Report Models
 
+class ProjectInfo(BaseModel):
+    """Project information model."""
+    id: int = Field(..., description="OpenProject project ID")
+    type: str = Field(..., description="Project type (e.g., 'portfolio')")
+
+
+class OpenProjectInfo(BaseModel):
+    """OpenProject instance information model."""
+    base_url: str = Field(..., description="Base URL of OpenProject instance")
+    user_token: str = Field(..., description="OpenProject user API token")
+
+
 class ProjectStatusReportRequest(BaseModel):
     """Request model for project status report generation."""
-    project_id: str = Field(..., description="OpenProject project ID")
-    openproject_base_url: str = Field(..., description="Base URL of OpenProject instance")
+    project: ProjectInfo = Field(..., description="Project information")
+    openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
 
 
 class WorkPackage(BaseModel):
@@ -117,7 +129,8 @@ class WorkPackage(BaseModel):
 
 class ProjectStatusReportResponse(BaseModel):
     """Response model for project status report."""
-    project_id: str
+    project_id: int
+    project_type: str
     report: str
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     work_packages_analyzed: int

@@ -3,3 +3,5 @@ uvicorn[standard]>=0.24.0
 haystack-ai>=2.0.0
 ollama-haystack>=1.0.0
 httpx>=0.25.0
+urllib3<2.0
+requests>=2.31.0
