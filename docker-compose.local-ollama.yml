@@ -1,5 +1,5 @@
-# Temporary docker-compose file for testing with local Ollama
-# Use this with: docker-compose -f docker-compose.local-ollama.yml up api
+# Temporary docker compose file for testing with local Ollama
+# Use this with: docker compose -f docker-compose.local-ollama.yml up api
 
 services:
   # Ollama services commented out for local testing
@@ -52,15 +52,14 @@ services:
     volumes:
       - ./src:/app/src
       - ./config:/app/config
-    ports:
-      - "8000:8000"
+    network_mode: host
     env_file:
       - .env
     environment:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
-      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_URL=http://localhost:11434
       - OLLAMA_MODEL=mistral:latest
       - MODELS_TO_PULL=mistral:latest
       - REQUIRED_MODELS=mistral:latest
@@ -83,9 +82,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-    #  - openproject_network
-      - haystack-internal
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 

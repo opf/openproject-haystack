@@ -17,4 +17,4 @@ docker/*.log
 .vscode/
 
 # Models
-models/
+/models/

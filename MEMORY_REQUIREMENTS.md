@@ -84,8 +84,8 @@ Error: model requires more system memory (5.7 GiB) than is available (2.8 GiB)
 
 3. **Restart Services with New Configuration**
    ```bash
-   docker-compose down
-   docker-compose up -d
+   docker compose down
+   docker compose up -d
    ```
 
 ### Error: "Container killed due to memory limit"
@@ -104,7 +104,7 @@ Error: model requires more system memory (5.7 GiB) than is available (2.8 GiB)
 
 **Solutions:**
 1. Monitor resource usage: `docker stats`
-2. Check logs: `docker-compose logs ollama`
+2. Check logs: `docker compose logs ollama`
 3. Adjust `OLLAMA_KEEP_ALIVE` to free memory faster
 4. Consider using quantized models
 
@@ -136,10 +136,10 @@ docker stats
 docker system df
 
 # Monitor Ollama service logs
-docker-compose logs -f ollama
+docker compose logs -f ollama
 
 # Check API service logs
-docker-compose logs -f api
+docker compose logs -f api
 ```
 
 ### Cleanup Commands
