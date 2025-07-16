@@ -1,17 +1,19 @@
 """API routes for the Haystack application."""
 
 from fastapi import APIRouter, HTTPException, Header
-from src.models.schemas import (
+from src.api.schemas import (
     GenerationRequest, GenerationResponse, HealthResponse,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatChoice,
     Usage, ModelsResponse, ModelInfo, ErrorResponse, ErrorDetail,
-    ProjectStatusReportRequest, ProjectStatusReportResponse
+    ProjectStatusReportRequest, ProjectStatusReportResponse,
+    SuggestRequest, SuggestResponse
 )
 from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
 import uuid
 import logging
 from typing import Optional
+from src.pipelines.suggestion import pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,10 +28,10 @@ def health_check():
 @router.post("/generate", response_model=GenerationResponse)
 def generate_text(request: GenerationRequest):
     """Generate text from a prompt.
-    
+
     Args:
         request: The generation request containing the prompt
-        
+
     Returns:
         Generated text response
     """
@@ -45,10 +47,10 @@ def generate_text(request: GenerationRequest):
 @router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 def create_chat_completion(request: ChatCompletionRequest):
     """Create a chat completion (OpenAI-compatible endpoint).
-    
+
     Args:
         request: Chat completion request with messages and parameters
-        
+
     Returns:
         Chat completion response in OpenAI format
     """
@@ -66,13 +68,13 @@ def create_chat_completion(request: ChatCompletionRequest):
                     }
                 }
             )
-        
+
         # Generate response using the pipeline
         response_text, usage_info = generation_pipeline.chat_completion(request)
-        
+
         # Create response in OpenAI format
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
-        
+
         response = ChatCompletionResponse(
             id=completion_id,
             model=request.model,
@@ -88,9 +90,9 @@ def create_chat_completion(request: ChatCompletionRequest):
             ],
             usage=Usage(**usage_info)
         )
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -115,11 +117,11 @@ async def generate_project_status_report(
     authorization: Optional[str] = Header(None)
 ):
     """Generate a project status report from OpenProject work packages.
-    
+
     Args:
         request: Project status report request with project ID and base URL
         authorization: Bearer token for OpenProject API authentication
-        
+
     Returns:
         Generated project status report
     """
@@ -136,7 +138,7 @@ async def generate_project_status_report(
                     }
                 }
             )
-        
+
         # Extract API key from Bearer token
         if not authorization.startswith("Bearer "):
             raise HTTPException(
@@ -149,9 +151,9 @@ async def generate_project_status_report(
                     }
                 }
             )
-        
+
         api_key = authorization[7:]  # Remove "Bearer " prefix
-        
+
         if not api_key:
             raise HTTPException(
                 status_code=401,
@@ -163,22 +165,22 @@ async def generate_project_status_report(
                     }
                 }
             )
-        
+
         # Initialize OpenProject client
         openproject_client = OpenProjectClient(
             base_url=request.openproject_base_url,
             api_key=api_key
         )
-        
+
         logger.info(f"Generating project status report for project {request.project_id}")
-        
+
         # Fetch work packages from OpenProject
         try:
             work_packages = await openproject_client.get_work_packages(request.project_id)
             logger.info(f"Fetched {len(work_packages)} work packages")
         except OpenProjectAPIError as e:
             logger.error(f"OpenProject API error: {e.message}")
-            
+
             # Map OpenProject API errors to appropriate HTTP status codes
             if e.status_code == 401:
                 raise HTTPException(status_code=401, detail={
@@ -220,7 +222,7 @@ async def generate_project_status_report(
                         "code": "openproject_api_error"
                     }
                 })
-        
+
         # Generate project status report using LLM
         try:
             report_text, analysis = generation_pipeline.generate_project_status_report(
@@ -228,16 +230,16 @@ async def generate_project_status_report(
                 openproject_base_url=request.openproject_base_url,
                 work_packages=work_packages
             )
-            
+
             logger.info(f"Successfully generated project status report for project {request.project_id}")
-            
+
             return ProjectStatusReportResponse(
                 project_id=request.project_id,
                 report=report_text,
                 work_packages_analyzed=len(work_packages),
                 openproject_base_url=request.openproject_base_url
             )
-            
+
         except Exception as e:
             logger.error(f"Error generating report: {str(e)}")
             raise HTTPException(
@@ -250,7 +252,7 @@ async def generate_project_status_report(
                     }
                 }
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -270,20 +272,20 @@ async def generate_project_status_report(
 @router.get("/v1/models", response_model=ModelsResponse)
 def list_models():
     """List available models (OpenAI-compatible endpoint).
-    
+
     Returns:
         List of available models in OpenAI format
     """
     try:
         available_models = generation_pipeline.get_available_models()
-        
+
         models = [
             ModelInfo(id=model_id)
             for model_id in available_models
         ]
-        
+
         return ModelsResponse(data=models)
-        
+
     except Exception as e:
         logger.error(f"Error listing models: {str(e)}")
         raise HTTPException(
@@ -303,16 +305,16 @@ def list_models():
 @router.get("/v1/models/{model_id}")
 def get_model(model_id: str):
     """Get specific model information (OpenAI-compatible endpoint).
-    
+
     Args:
         model_id: The model ID to retrieve
-        
+
     Returns:
         Model information
     """
     try:
         available_models = generation_pipeline.get_available_models()
-        
+
         if model_id not in available_models:
             raise HTTPException(
                 status_code=404,
@@ -325,9 +327,9 @@ def get_model(model_id: str):
                     }
                 }
             )
-        
+
         return ModelInfo(id=model_id)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -342,3 +344,12 @@ def get_model(model_id: str):
                 }
             }
         )
+
+
+@router.post("/suggest", response_model=SuggestResponse)
+def suggest_endpoint(request: SuggestRequest):
+    try:
+        result = pipeline.suggest(request.project_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

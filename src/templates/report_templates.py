@@ -1,21 +1,21 @@
 """Report templates for project status report generation."""
 
 from typing import List, Dict, Any
-from src.models.schemas import WorkPackage
+from src.api.schemas import WorkPackage
 from datetime import datetime, timedelta
 import json
 
 
 class ProjectReportAnalyzer:
     """Analyzer for work package data to extract insights."""
-    
+
     @staticmethod
     def analyze_work_packages(work_packages: List[WorkPackage]) -> Dict[str, Any]:
         """Analyze work packages and extract key metrics.
-        
+
         Args:
             work_packages: List of work packages to analyze
-            
+
         Returns:
             Dictionary containing analysis results
         """
@@ -29,54 +29,54 @@ class ProjectReportAnalyzer:
                 "timeline_insights": {},
                 "key_metrics": {}
             }
-        
+
         # Basic counts
         total_count = len(work_packages)
-        
+
         # Status distribution
         status_distribution = {}
         for wp in work_packages:
             status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
             status_distribution[status_name] = status_distribution.get(status_name, 0) + 1
-        
+
         # Priority distribution
         priority_distribution = {}
         for wp in work_packages:
             priority_name = wp.priority.get("name", "No Priority") if wp.priority else "No Priority"
             priority_distribution[priority_name] = priority_distribution.get(priority_name, 0) + 1
-        
+
         # Completion statistics
         completion_ratios = [wp.done_ratio for wp in work_packages if wp.done_ratio is not None]
         avg_completion = sum(completion_ratios) / len(completion_ratios) if completion_ratios else 0
         completed_count = sum(1 for wp in work_packages if wp.done_ratio == 100)
         in_progress_count = sum(1 for wp in work_packages if wp.done_ratio and 0 < wp.done_ratio < 100)
         not_started_count = sum(1 for wp in work_packages if not wp.done_ratio or wp.done_ratio == 0)
-        
+
         completion_stats = {
             "average_completion": round(avg_completion, 1),
             "completed": completed_count,
             "in_progress": in_progress_count,
             "not_started": not_started_count
         }
-        
+
         # Assignee workload
         assignee_workload = {}
         for wp in work_packages:
             assignee_name = wp.assignee.get("name", "Unassigned") if wp.assignee else "Unassigned"
             if assignee_name not in assignee_workload:
                 assignee_workload[assignee_name] = {"total": 0, "completed": 0, "in_progress": 0}
-            
+
             assignee_workload[assignee_name]["total"] += 1
             if wp.done_ratio == 100:
                 assignee_workload[assignee_name]["completed"] += 1
             elif wp.done_ratio and wp.done_ratio > 0:
                 assignee_workload[assignee_name]["in_progress"] += 1
-        
+
         # Timeline insights
         now = datetime.now()
         overdue_count = 0
         upcoming_deadlines = 0
-        
+
         for wp in work_packages:
             if wp.due_date:
                 try:
@@ -87,19 +87,19 @@ class ProjectReportAnalyzer:
                         upcoming_deadlines += 1
                 except (ValueError, TypeError):
                     continue
-        
+
         timeline_insights = {
             "overdue_items": overdue_count,
             "upcoming_deadlines_7_days": upcoming_deadlines
         }
-        
+
         # Key metrics
         key_metrics = {
             "completion_rate": round((completed_count / total_count) * 100, 1) if total_count > 0 else 0,
             "active_work_ratio": round(((in_progress_count + completed_count) / total_count) * 100, 1) if total_count > 0 else 0,
             "team_members": len([k for k in assignee_workload.keys() if k != "Unassigned"])
         }
-        
+
         return {
             "total_count": total_count,
             "status_distribution": status_distribution,
@@ -113,11 +113,11 @@ class ProjectReportAnalyzer:
 
 class ProjectStatusReportTemplate:
     """Template for generating project status reports."""
-    
+
     @staticmethod
     def get_default_template() -> str:
         """Get the default project status report template.
-        
+
         Returns:
             Template string for LLM prompt
         """
@@ -172,55 +172,55 @@ Please generate a comprehensive project status report that includes:
 
 Format the report in a professional, clear, and actionable manner. Use bullet points and structured sections for easy readability. Focus on insights that would be valuable for project managers and stakeholders.
 """
-    
+
     @staticmethod
     def format_work_packages_summary(work_packages: List[WorkPackage], limit: int = 10) -> str:
         """Format work packages into a summary for the report.
-        
+
         Args:
             work_packages: List of work packages
             limit: Maximum number of work packages to include in detail
-            
+
         Returns:
             Formatted string summary
         """
         if not work_packages:
             return "No work packages found for this project."
-        
+
         summary_lines = []
-        
+
         # Show top work packages (by priority or recent updates)
         sorted_packages = sorted(
-            work_packages, 
+            work_packages,
             key=lambda wp: (
                 wp.priority.get("id", 0) if wp.priority else 0,
                 wp.updated_at
-            ), 
+            ),
             reverse=True
         )
-        
+
         summary_lines.append(f"Top {min(limit, len(work_packages))} Work Packages:")
-        
+
         for i, wp in enumerate(sorted_packages[:limit], 1):
             status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
             priority_name = wp.priority.get("name", "Normal") if wp.priority else "Normal"
             assignee_name = wp.assignee.get("name", "Unassigned") if wp.assignee else "Unassigned"
             completion = wp.done_ratio if wp.done_ratio is not None else 0
-            
+
             summary_lines.append(
                 f"{i}. [{wp.id}] {wp.subject}\n"
                 f"   Status: {status_name} | Priority: {priority_name} | "
                 f"Assignee: {assignee_name} | Progress: {completion}%"
             )
-            
+
             if wp.due_date:
                 summary_lines.append(f"   Due Date: {wp.due_date}")
-        
+
         if len(work_packages) > limit:
             summary_lines.append(f"\n... and {len(work_packages) - limit} more work packages")
-        
+
         return "\n".join(summary_lines)
-    
+
     @staticmethod
     def create_report_prompt(
         project_id: str,
@@ -229,24 +229,24 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         analysis: Dict[str, Any]
     ) -> str:
         """Create the complete prompt for LLM report generation.
-        
+
         Args:
             project_id: Project identifier
             openproject_base_url: Base URL of OpenProject instance
             work_packages: List of work packages
             analysis: Analysis results from ProjectReportAnalyzer
-            
+
         Returns:
             Complete formatted prompt string
         """
         template = ProjectStatusReportTemplate.get_default_template()
-        
+
         # Format analysis data as JSON for better structure
         analysis_json = json.dumps(analysis, indent=2, default=str)
-        
+
         # Create work packages summary
         work_packages_summary = ProjectStatusReportTemplate.format_work_packages_summary(work_packages)
-        
+
         return template.format(
             project_id=project_id,
             openproject_base_url=openproject_base_url,
@@ -255,20 +255,20 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             analysis_data=analysis_json,
             work_packages_summary=work_packages_summary
         )
-    
+
     @staticmethod
     def get_custom_template(template_name: str) -> str:
         """Get a custom report template by name.
-        
+
         This method can be extended to support multiple report templates
         for different use cases or organizations.
-        
+
         Args:
             template_name: Name of the template to retrieve
-            
+
         Returns:
             Template string
-            
+
         Raises:
             ValueError: If template name is not found
         """
@@ -277,12 +277,12 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             "executive": ProjectStatusReportTemplate._get_executive_template(),
             "detailed": ProjectStatusReportTemplate._get_detailed_template()
         }
-        
+
         if template_name not in templates:
             raise ValueError(f"Template '{template_name}' not found. Available templates: {list(templates.keys())}")
-        
+
         return templates[template_name]
-    
+
     @staticmethod
     def _get_executive_template() -> str:
         """Executive-focused template with high-level insights."""
@@ -303,7 +303,7 @@ Focus on:
 
 Keep the report concise and focused on decision-making insights.
 """
-    
+
     @staticmethod
     def _get_detailed_template() -> str:
         """Detailed template for comprehensive analysis."""

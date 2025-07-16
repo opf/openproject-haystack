@@ -4,7 +4,7 @@ import httpx
 import logging
 import base64
 from typing import List, Dict, Any, Optional
-from src.models.schemas import WorkPackage
+from src.api.schemas import WorkPackage
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,10 @@ class OpenProjectAPIError(Exception):
 
 class OpenProjectClient:
     """Client for interacting with OpenProject API."""
-    
+
     def __init__(self, base_url: str, api_key: str):
         """Initialize the OpenProject client.
-        
+
         Args:
             base_url: Base URL of the OpenProject instance
             api_key: API key for authentication
@@ -38,40 +38,40 @@ class OpenProjectClient:
             "Accept": "application/hal+json",
             "Content-Type": "application/json"
         }
-    
+
     async def get_work_packages(self, project_id: str) -> List[WorkPackage]:
         """Fetch all work packages for a specific project.
-        
+
         Args:
             project_id: The OpenProject project ID
-            
+
         Returns:
             List of WorkPackage objects
-            
+
         Raises:
             OpenProjectAPIError: If API request fails
         """
         url = f"{self.base_url}/api/v3/projects/{project_id}/work_packages"
-        
+
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 logger.info(f"Fetching work packages from: {url}")
-                
+
                 response = await client.get(url, headers=self.headers)
-                
+
                 if response.status_code == 401:
                     raise OpenProjectAPIError(
-                        "Invalid API key or insufficient permissions", 
+                        "Invalid API key or insufficient permissions",
                         status_code=401
                     )
                 elif response.status_code == 403:
                     raise OpenProjectAPIError(
-                        "Insufficient permissions to access this project", 
+                        "Insufficient permissions to access this project",
                         status_code=403
                     )
                 elif response.status_code == 404:
                     raise OpenProjectAPIError(
-                        f"Project with ID '{project_id}' not found", 
+                        f"Project with ID '{project_id}' not found",
                         status_code=404
                     )
                 elif response.status_code != 200:
@@ -79,10 +79,10 @@ class OpenProjectClient:
                         f"OpenProject API returned status {response.status_code}: {response.text}",
                         status_code=response.status_code
                     )
-                
+
                 data = response.json()
                 work_packages = []
-                
+
                 # Parse work packages from the response
                 if "_embedded" in data and "elements" in data["_embedded"]:
                     for wp_data in data["_embedded"]["elements"]:
@@ -92,10 +92,10 @@ class OpenProjectClient:
                         except Exception as e:
                             logger.warning(f"Failed to parse work package {wp_data.get('id', 'unknown')}: {e}")
                             continue
-                
+
                 logger.info(f"Successfully fetched {len(work_packages)} work packages")
                 return work_packages
-                
+
         except httpx.TimeoutException:
             raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
         except httpx.ConnectError:
@@ -106,13 +106,13 @@ class OpenProjectClient:
             if isinstance(e, OpenProjectAPIError):
                 raise
             raise OpenProjectAPIError(f"Unexpected error: {str(e)}", status_code=500)
-    
+
     def _parse_work_package(self, wp_data: Dict[str, Any]) -> WorkPackage:
         """Parse work package data from OpenProject API response.
-        
+
         Args:
             wp_data: Raw work package data from API
-            
+
         Returns:
             WorkPackage object
         """
@@ -124,7 +124,7 @@ class OpenProjectClient:
                 "name": wp_data["status"].get("name"),
                 "href": wp_data["status"].get("href")
             }
-        
+
         # Extract priority information
         priority = None
         if "priority" in wp_data and wp_data["priority"]:
@@ -133,7 +133,7 @@ class OpenProjectClient:
                 "name": wp_data["priority"].get("name"),
                 "href": wp_data["priority"].get("href")
             }
-        
+
         # Extract assignee information
         assignee = None
         if "assignee" in wp_data and wp_data["assignee"]:
@@ -142,7 +142,7 @@ class OpenProjectClient:
                 "name": wp_data["assignee"].get("name"),
                 "href": wp_data["assignee"].get("href")
             }
-        
+
         # Extract description
         description = None
         if "description" in wp_data and wp_data["description"]:
@@ -151,9 +151,9 @@ class OpenProjectClient:
                 "raw": wp_data["description"].get("raw"),
                 "html": wp_data["description"].get("html")
             }
-        
+
         return WorkPackage(
-            id=wp_data["id"],
+            id=str(wp_data["id"]),
             subject=wp_data.get("subject", ""),
             status=status,
             priority=priority,
@@ -164,40 +164,42 @@ class OpenProjectClient:
             updated_at=wp_data.get("updatedAt", ""),
             description=description
         )
-    
+
     async def get_project_info(self, project_id: str) -> Dict[str, Any]:
         """Fetch basic project information.
-        
+
         Args:
             project_id: The OpenProject project ID
-            
+
         Returns:
             Project information dictionary
-            
+
         Raises:
             OpenProjectAPIError: If API request fails
         """
         url = f"{self.base_url}/api/v3/projects/{project_id}"
-        
+        headers = self.headers.copy() # Use a copy to avoid modifying self.headers
+        logger.info(f"Sending request to {url} with headers: {headers}")
+
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 logger.info(f"Fetching project info from: {url}")
-                
-                response = await client.get(url, headers=self.headers)
-                
+
+                response = await client.get(url, headers=headers)
+
                 if response.status_code == 401:
                     raise OpenProjectAPIError(
-                        "Invalid API key or insufficient permissions", 
+                        "Invalid API key or insufficient permissions",
                         status_code=401
                     )
                 elif response.status_code == 403:
                     raise OpenProjectAPIError(
-                        "Insufficient permissions to access this project", 
+                        "Insufficient permissions to access this project",
                         status_code=403
                     )
                 elif response.status_code == 404:
                     raise OpenProjectAPIError(
-                        f"Project with ID '{project_id}' not found", 
+                        f"Project with ID '{project_id}' not found",
                         status_code=404
                     )
                 elif response.status_code != 200:
@@ -205,9 +207,59 @@ class OpenProjectClient:
                         f"OpenProject API returned status {response.status_code}: {response.text}",
                         status_code=response.status_code
                     )
-                
+
                 return response.json()
-                
+
+        except httpx.TimeoutException:
+            raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
+        except httpx.ConnectError:
+            raise OpenProjectAPIError("Could not connect to OpenProject API", status_code=503)
+        except httpx.HTTPError as e:
+            raise OpenProjectAPIError(f"HTTP error occurred: {str(e)}", status_code=500)
+        except Exception as e:
+            if isinstance(e, OpenProjectAPIError):
+                raise
+            raise OpenProjectAPIError(f"Unexpected error: {str(e)}", status_code=500)
+
+    async def get_all_projects(self) -> List[Dict[str, Any]]:
+        """Fetch all projects from OpenProject, handling pagination."""
+        url = f"{self.base_url}/api/v3/projects"
+        headers = self.headers.copy()
+        projects = []
+        offset = 1
+        page_size = 100  # Adjust as needed
+
+        try:
+            while True:
+                params = {"offset": offset, "pageSize": page_size}
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    logger.info(f"Fetching projects from: {url} (offset={offset})")
+                    response = await client.get(url, headers=headers, params=params)
+
+                    if response.status_code == 401:
+                        raise OpenProjectAPIError(
+                            "Invalid API key or insufficient permissions",
+                            status_code=401
+                        )
+                    elif response.status_code == 403:
+                        raise OpenProjectAPIError(
+                            "Insufficient permissions to access projects",
+                            status_code=403
+                        )
+                    elif response.status_code != 200:
+                        raise OpenProjectAPIError(
+                            f"OpenProject API returned status {response.status_code}: {response.text}",
+                            status_code=response.status_code
+                        )
+
+                    data = response.json()
+                    elements = data.get("_embedded", {}).get("elements", [])
+                    projects.extend(elements)
+                    if len(elements) < page_size:
+                        break
+                    offset += page_size
+            logger.info(f"Successfully fetched {len(projects)} projects.")
+            return projects
         except httpx.TimeoutException:
             raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
         except httpx.ConnectError:
