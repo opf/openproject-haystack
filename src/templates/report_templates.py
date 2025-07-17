@@ -22,7 +22,10 @@ class ProjectReportAnalyzer:
         Returns:
             Dictionary containing analysis results
         """
+        logger.info(f"Starting analysis of {len(work_packages)} work packages")
+        
         if not work_packages:
+            logger.info("No work packages to analyze, returning empty results")
             return {
                 "total_count": 0,
                 "status_distribution": {},
@@ -35,12 +38,59 @@ class ProjectReportAnalyzer:
         
         # Basic counts
         total_count = len(work_packages)
+        logger.info(f"Analyzing {total_count} work packages for status distribution")
         
-        # Status distribution
+        # Status distribution with enhanced handling and detailed logging
         status_distribution = {}
-        for wp in work_packages:
-            status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
+        status_issues = []
+        
+        for i, wp in enumerate(work_packages, 1):
+            logger.info(f"[{i}/{total_count}] Analyzing work package {wp.id}: '{wp.subject}'")
+            
+            # Log the complete work package status information
+            logger.debug(f"WP {wp.id} raw status data: {wp.status}")
+            
+            if wp.status and isinstance(wp.status, dict):
+                status_name = wp.status.get("name")
+                status_id = wp.status.get("id")
+                
+                logger.info(f"WP {wp.id} has status object - ID: {status_id}, Name: '{status_name}'")
+                
+                if status_name:
+                    # Status name should already be normalized by the OpenProject client
+                    status_name = status_name.strip()
+                    if not status_name:
+                        status_name = "Empty Status"
+                        status_issues.append(f"WP {wp.id}: Empty status name")
+                        logger.warning(f"WP {wp.id} '{wp.subject}' has empty status name after stripping")
+                    else:
+                        logger.info(f"WP {wp.id} '{wp.subject}' has valid status: '{status_name}'")
+                else:
+                    status_name = "Missing Status Name"
+                    status_issues.append(f"WP {wp.id}: Status object exists but no name field")
+                    logger.warning(f"WP {wp.id} '{wp.subject}' has status object but no name field")
+            else:
+                status_name = "No Status Object"
+                status_issues.append(f"WP {wp.id}: No status object in work package data")
+                logger.warning(f"WP {wp.id} '{wp.subject}' has no status object - wp.status: {wp.status}")
+            
+            # Log the final status categorization
+            logger.info(f"WP {wp.id} '{wp.subject}' categorized as: '{status_name}'")
+            
             status_distribution[status_name] = status_distribution.get(status_name, 0) + 1
+        
+        # Log comprehensive status analysis results
+        logger.info("Status distribution analysis completed:")
+        for status, count in status_distribution.items():
+            logger.info(f"  - '{status}': {count} work packages")
+        
+        # Log status issues for debugging
+        if status_issues:
+            logger.warning(f"Found {len(status_issues)} status issues:")
+            for issue in status_issues:
+                logger.warning(f"  - {issue}")
+        else:
+            logger.info("No status issues found - all work packages have valid status information")
         
         # Priority distribution
         priority_distribution = {}

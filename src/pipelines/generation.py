@@ -190,9 +190,29 @@ class GenerationPipeline:
         Returns:
             Tuple of (generated_report, analysis_data)
         """
+        logger.info(f"🚀 GENERATING PROJECT STATUS REPORT")
+        logger.info(f"Project ID: {project_id} | Type: {project_type}")
+        logger.info(f"OpenProject URL: {openproject_base_url}")
+        logger.info(f"Work packages to analyze: {len(work_packages)}")
+        logger.info(f"Template: {template_name}")
+        
+        # Log summary of work packages being processed
+        if work_packages:
+            logger.info("Work packages summary for report generation:")
+            for i, wp in enumerate(work_packages[:10], 1):  # Show first 10
+                status_name = wp.status.get("name", "No Status") if wp.status else "No Status"
+                logger.info(f"  {i}. WP {wp.id}: '{wp.subject}' | Status: '{status_name}'")
+            
+            if len(work_packages) > 10:
+                logger.info(f"  ... and {len(work_packages) - 10} more work packages")
+        else:
+            logger.warning("No work packages provided for report generation!")
+        
         # Analyze work packages
+        logger.info("Starting work package analysis...")
         analyzer = ProjectReportAnalyzer()
         analysis = analyzer.analyze_work_packages(work_packages)
+        logger.info("Work package analysis completed")
         
         # Enhance with RAG context
         try:
