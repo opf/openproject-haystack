@@ -52,14 +52,18 @@ services:
     volumes:
       - ./src:/app/src
       - ./config:/app/config
-    network_mode: host
+    ports:
+      - "8000:8000"
+    networks:
+      - haystack-internal
     env_file:
       - .env
     environment:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
-      - OLLAMA_URL=http://localhost:11434
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_EMBEDDING_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=mistral:latest
       - MODELS_TO_PULL=mistral:latest
       - REQUIRED_MODELS=mistral:latest

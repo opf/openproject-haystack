@@ -677,9 +677,11 @@ class ProjectStatusReportTemplate:
         return """
 Sie sind ein Experte für Projektmanagement und erstellen einen umfassenden Projektstatusbericht basierend auf Arbeitspaket-Daten aus OpenProject.
 
+**WICHTIG: Erwähnen Sie NICHT die Projekt-ID im Berichtstext, da der Benutzer bereits weiß, in welchem Projekt er sich befindet. Beginnen Sie den Bericht direkt mit einer Statusübersicht, ohne auf die Projekt-ID zu verweisen.**
+
 Basierend auf den folgenden Projektdaten und Analysen, erstellen Sie einen professionellen Projektstatusbericht:
 
-PROJEKTINFORMATIONEN:
+PROJEKTINFORMATIONEN (nur zur Kontextualisierung, nicht im Bericht erwähnen):
 - Projekt-ID: {project_id}
 - OpenProject URL: {openproject_base_url}
 - Bericht erstellt: {generated_at}
@@ -863,7 +865,9 @@ Formatieren Sie den Bericht professionell, klar und umsetzbar. Verwenden Sie Auf
         return """
 Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik der deutschen Bundesverwaltung. Ihre Aufgabe ist es, einen umfassenden Projektstatusbericht (Projektstatusbericht) basierend auf Arbeitspaket-Daten aus OpenProject zu erstellen und dabei die offizielle deutsche PMFlex-Vorlage zu befolgen.
 
-PROJEKTINFORMATIONEN:
+**WICHTIG: Erwähnen Sie NICHT die Projekt-ID im Berichtstext, da der Benutzer bereits weiß, in welchem Projekt er sich befindet. Beginnen Sie den Bericht direkt mit dem aktuellen Projektstatus, ohne auf die Projekt-ID zu verweisen.**
+
+PROJEKTINFORMATIONEN (nur zur Kontextualisierung, nicht im Bericht erwähnen):
 - Projekt-ID: {project_id}
 - Projekttyp: {project_type}
 - OpenProject URL: {openproject_base_url}
@@ -879,11 +883,11 @@ ARBEITSPAKET-DETAILS:
 PMFLEX-KONTEXT UND VORLAGEN:
 {pmflex_context}
 
-Basierend auf den Projektdaten, der Analyse und dem PMFlex-Methodikkontext oben, erstellen Sie einen Projektstatusbericht (Projektstatusbericht), der der offiziellen deutschen PMFlex-Vorlage folg und genau in dieser Reihenfolget erstellt wird:
+Basierend auf den Projektdaten, der Analyse und dem PMFlex-Methodikkontext oben, erstellen Sie einen Projektstatusbericht (Projektstatusbericht), der der offiziellen deutschen PMFlex-Vorlage folgt und genau in dieser Reihenfolge erstellt wird:
 
 ### 1. **Zusammenfassung**
 Beginnen Sie mit einem umfassenden Zusammenfassungsabsatz, der Folgendes enthält:
-- Kurze Beschreibung des aktuellen Projektstatus
+- Direkte Beschreibung des aktuellen Projektstatus (ohne Erwähnung der Projekt-ID)
 - Gesamtbewertung der Projektgesundheit nach PMFlex-Kriterien
 - Wichtige Erfolge und Fortschrittshighlights aus der Berichtsperiode
 - Kritische Probleme oder Risiken, die Aufmerksamkeit erfordern
