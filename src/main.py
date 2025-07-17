@@ -30,6 +30,7 @@
 
 import logging
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes import router
 from src.utils.logging_config import setup_logging
 from config.settings import settings
@@ -45,6 +46,15 @@ app = FastAPI(
     description="AI-powered application using Haystack and Ollama",
     version="1.0.0",
     root_path="/haystack"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.on_event("startup")
