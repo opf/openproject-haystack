@@ -43,7 +43,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="OpenProject Haystack",
     description="AI-powered application using Haystack and Ollama",
-    version="1.0.0"
+    version="1.0.0",
+    root_path="/haystack"
 )
 
 @app.on_event("startup")
