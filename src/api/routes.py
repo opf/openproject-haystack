@@ -1,7 +1,7 @@
 """API routes for the Haystack application."""
 
-from fastapi import APIRouter, HTTPException, Header
-from src.api.schemas import (
+from fastapi import APIRouter, HTTPException
+from src.models.schemas import (
     GenerationRequest, GenerationResponse, HealthResponse,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatChoice,
     Usage, ModelsResponse, ModelInfo, ErrorResponse, ErrorDetail,
@@ -12,7 +12,6 @@ from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
 import uuid
 import logging
-from typing import Optional
 from src.pipelines.suggestion import pipeline
 
 logger = logging.getLogger(__name__)
@@ -109,74 +108,183 @@ def create_chat_completion(request: ChatCompletionRequest):
         )
 
 
+# RAG Management endpoints
+
+@router.post("/rag/initialize")
+def initialize_rag_system():
+    """Initialize the RAG system by loading PMFlex documents.
+
+    Returns:
+        Initialization status and results
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        result = rag_pipeline.initialize()
+
+        return {
+            "status": "success",
+            "message": "RAG system initialization completed",
+            "result": result
+        }
+
+    except Exception as e:
+        logger.error(f"Error initializing RAG system: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to initialize RAG system: {str(e)}",
+                    "type": "rag_initialization_error",
+                    "code": "rag_init_failed"
+                }
+            }
+        )
+
+
+@router.get("/rag/status")
+def get_rag_status():
+    """Get the current status of the RAG system.
+
+    Returns:
+        RAG system status and statistics
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        stats = rag_pipeline.get_pipeline_stats()
+        validation = rag_pipeline.validate_setup()
+
+        return {
+            "status": "success",
+            "pipeline_stats": stats,
+            "validation": validation
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting RAG status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to get RAG status: {str(e)}",
+                    "type": "rag_status_error",
+                    "code": "rag_status_failed"
+                }
+            }
+        )
+
+
+@router.post("/rag/refresh")
+def refresh_rag_documents():
+    """Refresh the RAG document index.
+
+    Returns:
+        Refresh operation results
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        result = rag_pipeline.refresh_documents()
+
+        return {
+            "status": "success",
+            "message": "Document refresh completed",
+            "result": result
+        }
+
+    except Exception as e:
+        logger.error(f"Error refreshing RAG documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to refresh documents: {str(e)}",
+                    "type": "rag_refresh_error",
+                    "code": "rag_refresh_failed"
+                }
+            }
+        )
+
+
+@router.post("/rag/search")
+def search_rag_documents(query: str, max_results: int = 5):
+    """Search RAG documents for specific information.
+
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return
+
+    Returns:
+        Search results from RAG system
+    """
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        results = rag_pipeline.search_documents(query, max_results)
+
+        return {
+            "status": "success",
+            "query": query,
+            "results": results,
+            "total_results": len(results)
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching RAG documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to search documents: {str(e)}",
+                    "type": "rag_search_error",
+                    "code": "rag_search_failed"
+                }
+            }
+        )
+
+
 # Project Status Report endpoint
 
 @router.post("/generate-project-status-report", response_model=ProjectStatusReportResponse)
 async def generate_project_status_report(
-    request: ProjectStatusReportRequest,
-    authorization: Optional[str] = Header(None)
+    request: ProjectStatusReportRequest
 ):
     """Generate a project status report from OpenProject work packages.
 
     Args:
-        request: Project status report request with project ID and base URL
-        authorization: Bearer token for OpenProject API authentication
+        request: Project status report request with project info and OpenProject instance info
 
     Returns:
         Generated project status report
     """
     try:
-        # Validate authorization header
-        if not authorization:
+        # Extract values from the new request structure
+        project_id = request.project.id
+        project_type = request.project.type
+        base_url = request.openproject.base_url
+        user_token = request.openproject.user_token
+
+        # Validate user token
+        if not user_token:
             raise HTTPException(
                 status_code=401,
                 detail={
                     "error": {
-                        "message": "Authorization header is required",
+                        "message": "OpenProject user token is required",
                         "type": "authentication_error",
-                        "code": "missing_authorization"
-                    }
-                }
-            )
-
-        # Extract API key from Bearer token
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "Authorization header must be in format 'Bearer <token>'",
-                        "type": "authentication_error",
-                        "code": "invalid_authorization_format"
-                    }
-                }
-            )
-
-        api_key = authorization[7:]  # Remove "Bearer " prefix
-
-        if not api_key:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "API key cannot be empty",
-                        "type": "authentication_error",
-                        "code": "empty_api_key"
+                        "code": "missing_user_token"
                     }
                 }
             )
 
         # Initialize OpenProject client
         openproject_client = OpenProjectClient(
-            base_url=request.openproject_base_url,
-            api_key=api_key
+            base_url=base_url,
+            api_key=user_token
         )
 
-        logger.info(f"Generating project status report for project {request.project_id}")
+        logger.info(f"Generating project status report for project {project_id} (type: {project_type})")
 
         # Fetch work packages from OpenProject
         try:
-            work_packages = await openproject_client.get_work_packages(request.project_id)
+            work_packages = await openproject_client.get_work_packages(str(project_id))
             logger.info(f"Fetched {len(work_packages)} work packages")
         except OpenProjectAPIError as e:
             logger.error(f"OpenProject API error: {e.message}")
@@ -226,18 +334,20 @@ async def generate_project_status_report(
         # Generate project status report using LLM
         try:
             report_text, analysis = generation_pipeline.generate_project_status_report(
-                project_id=request.project_id,
-                openproject_base_url=request.openproject_base_url,
+                project_id=str(project_id),
+                project_type=project_type,
+                openproject_base_url=base_url,
                 work_packages=work_packages
             )
 
-            logger.info(f"Successfully generated project status report for project {request.project_id}")
+            logger.info(f"Successfully generated project status report for project {project_id}")
 
             return ProjectStatusReportResponse(
-                project_id=request.project_id,
+                project_id=project_id,
+                project_type=project_type,
                 report=report_text,
                 work_packages_analyzed=len(work_packages),
-                openproject_base_url=request.openproject_base_url
+                openproject_base_url=base_url
             )
 
         except Exception as e:

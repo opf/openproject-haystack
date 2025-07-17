@@ -48,11 +48,50 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    """Log application startup."""
+    """Log application startup and initialize RAG system."""
     logger.info("OpenProject Haystack application starting up...")
     logger.info(f"Log level set to: {settings.LOG_LEVEL}")
     logger.info(f"Ollama URL: {settings.OLLAMA_URL}")
     logger.info(f"Ollama Model: {settings.OLLAMA_MODEL}")
+    
+    # Initialize RAG system with timeout and error handling
+    try:
+        from src.pipelines.rag_pipeline import rag_pipeline
+        logger.info("Initializing RAG system...")
+        
+        # Add timeout handling for RAG initialization
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("RAG initialization timed out")
+        
+        # Set timeout for RAG initialization (60 seconds)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(60)
+        
+        try:
+            result = rag_pipeline.initialize()
+            signal.alarm(0)  # Cancel timeout
+            
+            if result['status'] == 'success':
+                logger.info("RAG system initialized successfully")
+                init_result = result.get('initialization_result', {})
+                if init_result.get('documents_processed', 0) > 0:
+                    logger.info(f"Processed {init_result['documents_processed']} PMFlex documents")
+                    logger.info(f"Created {init_result['chunks_created']} text chunks")
+                else:
+                    logger.warning("No PMFlex documents found - RAG system running without context")
+            else:
+                logger.warning(f"RAG system initialization had issues: {result.get('message', 'Unknown error')}")
+                
+        except TimeoutError:
+            signal.alarm(0)  # Cancel timeout
+            logger.error("RAG system initialization timed out after 60 seconds")
+            logger.info("Application will continue without RAG enhancement")
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG system: {e}")
+        logger.info("Application will continue without RAG enhancement")
 
 # Include API routes
 app.include_router(router)

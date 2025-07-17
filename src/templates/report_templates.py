@@ -257,6 +257,132 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         )
 
     @staticmethod
+    def create_enhanced_report_prompt(
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        work_packages: List[WorkPackage],
+        analysis: Dict[str, Any],
+        pmflex_context: str
+    ) -> str:
+        """Create an enhanced prompt with PMFlex RAG context.
+        
+        Args:
+            project_id: Project identifier
+            project_type: Type of project (portfolio, program, project)
+            openproject_base_url: Base URL of OpenProject instance
+            work_packages: List of work packages
+            analysis: Analysis results from ProjectReportAnalyzer
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Complete formatted prompt string with RAG enhancement
+        """
+        template = ProjectStatusReportTemplate.get_enhanced_template()
+        
+        # Format analysis data as JSON for better structure
+        analysis_json = json.dumps(analysis, indent=2, default=str)
+        
+        # Create work packages summary
+        work_packages_summary = ProjectStatusReportTemplate.format_work_packages_summary(work_packages)
+        
+        return template.format(
+            project_id=project_id,
+            project_type=project_type,
+            openproject_base_url=openproject_base_url,
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            total_work_packages=len(work_packages),
+            analysis_data=analysis_json,
+            work_packages_summary=work_packages_summary,
+            pmflex_context=pmflex_context or "No PMFlex context available."
+        )
+    
+    @staticmethod
+    def get_enhanced_template() -> str:
+        """Get the enhanced project status report template with PMFlex context.
+        
+        Returns:
+            Template string for LLM prompt with RAG enhancement
+        """
+        return """
+You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report (Projektstatusbericht) based on work package data from OpenProject, following the official German PMFlex template structure.
+
+PROJECT INFORMATION:
+- Project ID: {project_id}
+- Project Type: {project_type}
+- OpenProject URL: {openproject_base_url}
+- Report Generated: {generated_at}
+- Total Work Packages Analyzed: {total_work_packages}
+
+WORK PACKAGE ANALYSIS:
+{analysis_data}
+
+WORK PACKAGE DETAILS:
+{work_packages_summary}
+
+PMFLEX CONTEXT AND TEMPLATES:
+{pmflex_context}
+
+Based on the project data, analysis, and PMFlex methodology context above, generate a project status report (Projektstatusbericht) that follows the official German PMFlex template structure:
+
+## REPORT STRUCTURE (Generate in this exact order):
+
+### 1. **ZUSAMMENFASSUNG (Summary)**
+Start with a comprehensive summary paragraph that provides:
+- Brief description of the current project status (Kurze Beschreibung des aktuellen Status des Projekts)
+- Overall project health assessment according to PMFlex criteria
+- Key achievements and progress highlights from the reporting period
+- Critical issues or risks that require attention
+- Overall trajectory and outlook for the project
+
+### 2. **STATUSÜBERSICHT (Status Overview)**
+Provide a status assessment using the PMFlex traffic light system:
+- **Gesamtstatus (Overall Status)**: Assess as "Im Plan" (Green), "Teilweise kritisch" (Yellow), or "Kritisch" (Red)
+- **Zeit (Time/Schedule)**: Schedule adherence assessment
+- **Kosten (Costs)**: Budget and cost status (if available from work package data)
+- **Risiko (Risk)**: Risk level assessment based on work package analysis
+
+Include the reporting period (Berichtsperiode) based on the work package data timeframe.
+
+### 3. **ABGESCHLOSSENE AKTIVITÄTEN UND MEILENSTEINE (Completed Activities and Milestones)**
+List completed work packages and achievements:
+- Work packages completed during the reporting period (with completion percentage = 100%)
+- Key milestones reached
+- Significant deliverables completed
+- Quality gates passed
+- Use bullet points with specific work package IDs and titles where available
+
+### 4. **NÄCHSTE AKTIVITÄTEN UND MEILENSTEINE (Next Activities and Milestones)**
+Outline upcoming work and priorities:
+- Work packages scheduled for the next period
+- Upcoming milestones and deadlines
+- Critical path activities
+- Dependencies that need attention
+- Resource requirements for upcoming activities
+- Use bullet points with specific work package IDs and due dates where available
+
+### 5. **ENTSCHEIDUNGSBEDARF (Decision Requirements)**
+Identify issues requiring decisions or escalation:
+- Blocked work packages requiring management intervention
+- Resource conflicts or capacity issues
+- Scope changes or requirement clarifications needed
+- Risk mitigation decisions required
+- Budget or timeline adjustments needed
+- Stakeholder decisions pending
+- Use bullet points with clear action items and responsible parties
+
+## FORMATTING REQUIREMENTS:
+- Use German PMFlex terminology throughout
+- Structure with clear headings and bullet points
+- Include specific work package references where relevant
+- Maintain professional tone suitable for German federal government standards
+- Focus on actionable insights and clear status communication
+- Ensure compliance with PMFlex documentation standards
+
+The report should reflect PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration. Prioritize clarity and actionable information for project stakeholders and governance bodies.
+"""
+    
+    @staticmethod
     def get_custom_template(template_name: str) -> str:
         """Get a custom report template by name.
 

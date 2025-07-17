@@ -117,3 +117,11 @@ def main():
         print("❌ Server is not responding. Please start the server first.")
         sys.exit(1)
     
+    print("\n" + "="*60)
+    print("Running project status report test...")
+    print("="*60)
+    test_project_status_report()
+
+
+if __name__ == "__main__":
+    main()

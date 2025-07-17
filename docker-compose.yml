@@ -6,7 +6,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     environment:
-      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_MAX_LOADED_MODELS=2
       - OLLAMA_NUM_PARALLEL=4
     deploy:
       resources:

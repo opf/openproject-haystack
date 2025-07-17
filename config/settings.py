@@ -26,6 +26,15 @@ class Settings:
     # API configuration
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    
+    # RAG Configuration
+    DOCUMENTS_PATH: str = os.getenv("DOCUMENTS_PATH", "documents")
+    VECTOR_STORE_PATH: str = os.getenv("VECTOR_STORE_PATH", "vector_store")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+    OLLAMA_EMBEDDING_URL: str = os.getenv("OLLAMA_EMBEDDING_URL", "http://localhost:11434")
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "800"))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
+    MAX_RETRIEVED_DOCS: int = int(os.getenv("MAX_RETRIEVED_DOCS", "5"))
 
     # OpenProject configuration
     OPENPROJECT_BASE_URL: str = os.getenv("OPENPROJECT_BASE_URL", "")
