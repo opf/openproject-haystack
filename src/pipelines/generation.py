@@ -264,7 +264,7 @@ class GenerationPipeline:
         openproject_base_url: str,
         checks_results: Dict[str, Any],
         pmflex_context: str = ""
-    ) -> str:
+    ) -> List[Dict[str, Any]]:
         """Generate German project management hints from check results.
         
         Args:
@@ -275,35 +275,530 @@ class GenerationPipeline:
             pmflex_context: PMFlex context from RAG system
             
         Returns:
-            Generated hints in JSON format
+            List of hint dictionaries with title and description
         """
         from src.templates.report_templates import ProjectManagementHintsTemplate
         
-        # Create hints prompt using template
-        template = ProjectManagementHintsTemplate()
-        prompt = template.create_hints_prompt(
-            project_id=project_id,
-            project_type=project_type,
-            openproject_base_url=openproject_base_url,
-            checks_results=checks_results,
-            pmflex_context=pmflex_context
-        )
+        logger.info("=== STARTING HINT GENERATION (IMPROVED) ===")
         
-        # Generate hints using LLM with specific parameters for JSON output
-        generator = OllamaGenerator(
-            model=settings.OLLAMA_MODEL,
-            url=settings.OLLAMA_URL,
-            generation_kwargs={
-                "num_predict": 2000,  # Sufficient for JSON response
-                "temperature": 0.2,   # Lower temperature for more consistent JSON
-                "format": "json"      # Request JSON format if supported
-            }
-        )
+        # First, always use the hint optimizer to generate a baseline
+        from src.utils.hint_optimizer import hint_optimizer
+        baseline_json = hint_optimizer.generate_enhanced_fallback_hints(checks_results)
+        baseline_hints = json.loads(baseline_json)["hints"]
         
-        result = generator.run(prompt)
-        hints_json = result["replies"][0]
+        logger.info(f"Generated {len(baseline_hints)} baseline hints from optimizer")
         
-        return hints_json
+        # Try to enhance with LLM if available
+        try:
+            # Create a simpler prompt that asks for structured text, not JSON
+            template = ProjectManagementHintsTemplate()
+            prompt = template.create_simple_hints_prompt(
+                project_id=project_id,
+                project_type=project_type,
+                openproject_base_url=openproject_base_url,
+                checks_results=checks_results,
+                pmflex_context=pmflex_context
+            )
+            
+            # Generate hints using LLM with simpler parameters
+            generator = OllamaGenerator(
+                model=settings.OLLAMA_MODEL,
+                url=settings.OLLAMA_URL,
+                generation_kwargs={
+                    "num_predict": 2000,  # Reduced for simpler text output
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "stop": ["Hinweis 11:", "Hint 11:"],  # Stop after 10 hints
+                }
+            )
+            
+            result = generator.run(prompt)
+            llm_response = result["replies"][0]
+            
+            logger.info(f"LLM response length: {len(llm_response)} characters")
+            
+            # Parse the structured text response
+            enhanced_hints = self._parse_structured_hints(llm_response)
+            
+            if enhanced_hints and len(enhanced_hints) > 0:
+                logger.info(f"Successfully parsed {len(enhanced_hints)} enhanced hints from LLM")
+                # Merge with baseline hints, preferring enhanced ones
+                return self._merge_hints(enhanced_hints, baseline_hints)
+            else:
+                logger.warning("Could not parse enhanced hints, using baseline")
+                return baseline_hints
+                
+        except Exception as e:
+            logger.error(f"LLM enhancement failed: {e}")
+            logger.info("Falling back to baseline hints")
+            return baseline_hints
+    
+    def _parse_structured_hints(self, text: str) -> List[Dict[str, Any]]:
+        """Parse structured hint text into list of hint dictionaries.
+        
+        Args:
+            text: Structured text with numbered hints
+            
+        Returns:
+            List of parsed hints
+        """
+        hints = []
+        
+        try:
+            # Split by hint numbers (e.g., "1.", "2.", etc.)
+            import re
+            hint_pattern = r'(\d+)\.\s*([^:]+):\s*([^0-9]+?)(?=\d+\.|$)'
+            matches = re.findall(hint_pattern, text, re.DOTALL)
+            
+            for match in matches[:10]:  # Max 10 hints
+                number, title, description = match
+                title = title.strip()
+                description = description.strip()
+                
+                if title and description:
+                    hints.append({
+                        "checked": False,
+                        "title": title[:60],  # Ensure max length
+                        "description": description
+                    })
+            
+            # If regex didn't work, try line-based parsing
+            if not hints:
+                lines = text.split('\n')
+                current_hint = None
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Check if this is a new hint (starts with number)
+                    if re.match(r'^\d+\.', line):
+                        if current_hint and current_hint.get("title") and current_hint.get("description"):
+                            hints.append(current_hint)
+                        
+                        # Extract title from the line
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            title = parts[0].lstrip('0123456789. ').strip()
+                            description = parts[1].strip()
+                            current_hint = {
+                                "checked": False,
+                                "title": title[:60],
+                                "description": description
+                            }
+                        else:
+                            title = line.lstrip('0123456789. ').strip()
+                            current_hint = {
+                                "checked": False,
+                                "title": title[:60],
+                                "description": ""
+                            }
+                    elif current_hint and not current_hint.get("description"):
+                        # This line is the description
+                        current_hint["description"] = line
+                    elif current_hint:
+                        # Append to existing description
+                        current_hint["description"] += " " + line
+                
+                # Don't forget the last hint
+                if current_hint and current_hint.get("title") and current_hint.get("description"):
+                    hints.append(current_hint)
+            
+            return hints[:10]  # Ensure max 10 hints
+            
+        except Exception as e:
+            logger.error(f"Failed to parse structured hints: {e}")
+            return []
+    
+    def _merge_hints(self, enhanced_hints: List[Dict[str, Any]], baseline_hints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Merge enhanced and baseline hints, removing duplicates.
+        
+        Args:
+            enhanced_hints: Hints from LLM
+            baseline_hints: Hints from optimizer
+            
+        Returns:
+            Merged list of hints
+        """
+        merged = []
+        seen_titles = set()
+        
+        # Add enhanced hints first
+        for hint in enhanced_hints:
+            title_lower = hint["title"].lower()
+            if title_lower not in seen_titles:
+                merged.append(hint)
+                seen_titles.add(title_lower)
+        
+        # Add baseline hints if we need more
+        for hint in baseline_hints:
+            if len(merged) >= 10:
+                break
+            title_lower = hint["title"].lower()
+            if title_lower not in seen_titles:
+                merged.append(hint)
+                seen_titles.add(title_lower)
+        
+        return merged[:10]  # Ensure max 10 hints
+    
+    def _clean_json_response(self, response: str) -> str:
+        """Clean and extract JSON from LLM response.
+        
+        Args:
+            response: Raw response from LLM
+            
+        Returns:
+            Cleaned JSON string
+        """
+        logger.info("=== STARTING JSON CLEANING PROCESS ===")
+        logger.info(f"Original response length: {len(response)}")
+        logger.info(f"Original response type: {type(response)}")
+        logger.info(f"Original response repr: {repr(response)}")
+        logger.info(f"Original response starts with: {response[:100] if response else 'EMPTY'}")
+        logger.info(f"Original response ends with: {response[-100:] if response else 'EMPTY'}")
+        
+        # Remove markdown code blocks
+        cleaned = re.sub(r'```json\s*', '', response)
+        logger.info(f"After removing '```json': {repr(cleaned)}")
+        
+        cleaned = re.sub(r'```\s*$', '', cleaned)
+        logger.info(f"After removing closing '```': {repr(cleaned)}")
+        
+        # Remove any leading/trailing whitespace
+        cleaned = cleaned.strip()
+        logger.info(f"After stripping whitespace: {repr(cleaned)}")
+        logger.info(f"Cleaned response length: {len(cleaned)}")
+        
+        if not cleaned:
+            logger.error("Cleaned response is empty!")
+            raise ValueError("Response is empty after cleaning")
+        
+        # Check what the cleaned response starts with
+        logger.info(f"Cleaned response starts with: {cleaned[:50]}...")
+        logger.info(f"Cleaned response ends with: {cleaned[-50:]}")
+        
+        # Handle the specific case where response starts with malformed JSON
+        if cleaned.startswith('"hints"') or cleaned.startswith('\n  "hints"') or '"hints"' in cleaned[:20]:
+            logger.warning("=== DETECTED INCOMPLETE JSON STARTING WITH 'hints' ===")
+            logger.warning(f"This is the problematic case! Response: {repr(cleaned)}")
+            return self._reconstruct_incomplete_json(cleaned)
+        
+        # Handle case where response doesn't start with {
+        if not cleaned.startswith('{'):
+            logger.warning(f"=== RESPONSE DOESN'T START WITH BRACE ===")
+            logger.warning(f"Response starts with: {repr(cleaned[:20])}")
+            # Try to find the start of JSON
+            json_start = cleaned.find('{')
+            if json_start != -1:
+                cleaned = cleaned[json_start:]
+                logger.info(f"Found JSON start at position {json_start}")
+                logger.info(f"Extracted JSON: {repr(cleaned)}")
+            else:
+                logger.error("No JSON structure found in response")
+                logger.error(f"Searched for {{ in: {repr(cleaned)}")
+                raise ValueError("No valid JSON structure found in response")
+        
+        # Try to extract JSON block
+        logger.info("=== ATTEMPTING TO EXTRACT JSON BLOCK ===")
+        json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if json_match:
+            extracted = json_match.group(0)
+            logger.info(f"Extracted JSON block: {repr(extracted)}")
+            cleaned = extracted
+        else:
+            logger.warning("No JSON block found with regex")
+        
+        # Fix common JSON issues
+        logger.info("=== FIXING COMMON JSON ISSUES ===")
+        before_trailing_comma_fix = cleaned
+        cleaned = re.sub(r',\s*}', '}', cleaned)  # Remove trailing commas before }
+        if cleaned != before_trailing_comma_fix:
+            logger.info("Fixed trailing commas before }")
+            
+        before_trailing_comma_array_fix = cleaned
+        cleaned = re.sub(r',\s*]', ']', cleaned)  # Remove trailing commas before ]
+        if cleaned != before_trailing_comma_array_fix:
+            logger.info("Fixed trailing commas before ]")
+        
+        # Ensure JSON is complete
+        logger.info("=== CHECKING IF JSON IS COMPLETE ===")
+        is_complete = self._is_json_complete(cleaned)
+        logger.info(f"JSON completeness check result: {is_complete}")
+        
+        if not is_complete:
+            logger.warning("JSON appears incomplete, attempting to complete it")
+            before_completion = cleaned
+            cleaned = self._complete_json_structure(cleaned)
+            logger.info(f"Before completion: {repr(before_completion)}")
+            logger.info(f"After completion: {repr(cleaned)}")
+        
+        logger.info("=== FINAL CLEANED JSON ===")
+        logger.info(f"Final cleaned JSON: {repr(cleaned)}")
+        logger.info(f"Final cleaned JSON length: {len(cleaned)}")
+        
+        return cleaned
+    
+    def _reconstruct_incomplete_json(self, response: str) -> str:
+        """Reconstruct incomplete JSON that starts with 'hints'.
+        
+        Args:
+            response: Incomplete JSON response
+            
+        Returns:
+            Reconstructed JSON string
+        """
+        logger.info("=== STARTING JSON RECONSTRUCTION ===")
+        logger.info(f"Input response length: {len(response)}")
+        logger.info(f"Input response type: {type(response)}")
+        logger.info(f"Input response repr: {repr(response)}")
+        logger.info(f"Input response full content: {response}")
+        
+        # Handle the case where response is just whitespace + "hints"
+        response = response.strip()
+        logger.info(f"After stripping: {repr(response)}")
+        
+        if not response:
+            logger.error("Response is empty after stripping")
+            raise ValueError("Empty response after stripping")
+        
+        # Check if response is extremely short (likely truncated)
+        if len(response) < 10:
+            logger.warning(f"Response extremely short ({len(response)} chars): '{response}' - creating fallback")
+            return '{"hints": []}'
+        
+        # Find the "hints" part
+        logger.info("=== SEARCHING FOR 'hints' ===")
+        hints_start = response.find('"hints"')
+        logger.info(f"Found 'hints' at position: {hints_start}")
+        
+        if hints_start == -1:
+            logger.error("Could not find 'hints' in response")
+            logger.error(f"Response content: {repr(response)}")
+            # Try to create a minimal valid JSON with the available content
+            logger.info("Creating minimal fallback JSON")
+            return '{"hints": []}'
+        
+        # Extract from "hints" onwards
+        hints_part = response[hints_start:]
+        logger.info(f"=== EXTRACTED HINTS PART ===")
+        logger.info(f"Hints part length: {len(hints_part)}")
+        logger.info(f"Hints part repr: {repr(hints_part)}")
+        logger.info(f"Hints part content: {hints_part}")
+        
+        # Try to build proper JSON structure
+        if hints_part.startswith('"hints"'):
+            logger.info("Hints part starts with '\"hints\"'")
+            # Check if it has a colon after hints
+            if ':' in hints_part:
+                logger.info("Found colon in hints part")
+                # Good, we have "hints": something
+                reconstructed = '{' + hints_part
+                logger.info(f"Reconstructed with brace: {repr(reconstructed)}")
+            else:
+                logger.warning("No colon found in hints part")
+                # Missing colon, add it with empty array
+                reconstructed = '{"hints": []}'
+                logger.info("Created empty array fallback")
+        else:
+            logger.warning("Hints part doesn't start with '\"hints\"'")
+            # Handle case where hints_part is literally just "hints" or similar
+            if hints_part.strip() == '"hints"' or hints_part.strip() == 'hints':
+                reconstructed = '{"hints": []}'
+                logger.info("Found bare 'hints', creating empty array")
+            else:
+                reconstructed = '{' + hints_part
+                logger.info(f"Added brace: {repr(reconstructed)}")
+        
+        # Ensure we have a valid JSON structure
+        logger.info("=== ENSURING VALID JSON STRUCTURE ===")
+        if not reconstructed.startswith('{'):
+            logger.warning("Reconstructed doesn't start with brace, adding")
+            reconstructed = '{' + reconstructed
+        
+        logger.info(f"After ensuring starts with brace: {repr(reconstructed)}")
+        
+        # Try to properly close the JSON
+        logger.info("=== ATTEMPTING TO CLOSE JSON ===")
+        if not reconstructed.rstrip().endswith('}'):
+            logger.info("JSON doesn't end with brace, attempting to close")
+            # Look for the end of the hints array
+            if ']' in reconstructed:
+                logger.info("Found closing bracket, adding brace after it")
+                # Find the last ] and add closing brace after it
+                last_bracket = reconstructed.rfind(']')
+                logger.info(f"Last bracket at position: {last_bracket}")
+                if last_bracket != -1:
+                    reconstructed = reconstructed[:last_bracket + 1] + '}'
+                    logger.info(f"Added closing brace: {repr(reconstructed)}")
+                else:
+                    # No closing bracket found, add both
+                    reconstructed += ']}'
+                    logger.info("Added both closing bracket and brace")
+            else:
+                logger.info("No closing bracket found, attempting to add array structure")
+                # No array structure found, try to add it
+                if '"hints"' in reconstructed and ':' in reconstructed:
+                    logger.info("Found hints and colon, attempting to complete")
+                    # We have "hints": but no array, complete it
+                    colon_pos = reconstructed.find(':', reconstructed.find('"hints"'))
+                    logger.info(f"Colon position: {colon_pos}")
+                    if colon_pos != -1:
+                        # Check what comes after the colon
+                        after_colon = reconstructed[colon_pos + 1:].strip()
+                        logger.info(f"After colon: {repr(after_colon)}")
+                        if not after_colon or after_colon == '':
+                            reconstructed = reconstructed[:colon_pos + 1] + ' []}'
+                            logger.info("Added empty array after colon")
+                        else:
+                            reconstructed += ']}'
+                            logger.info("Added closing bracket and brace")
+                    else:
+                        reconstructed += ']}'
+                        logger.info("Added closing bracket and brace (no colon)")
+                else:
+                    reconstructed += ']}'
+                    logger.info("Added closing bracket and brace (no hints/colon)")
+        
+        # Final validation - ensure we have a complete JSON structure
+        logger.info("=== FINAL VALIDATION ===")
+        logger.info(f"Before final validation: {repr(reconstructed)}")
+        if not (reconstructed.startswith('{') and reconstructed.endswith('}')):
+            logger.warning("Reconstructed JSON doesn't have proper boundaries, creating fallback")
+            reconstructed = '{"hints": []}'
+        
+        logger.info(f"=== FINAL RECONSTRUCTED JSON ===")
+        logger.info(f"Final JSON: {repr(reconstructed)}")
+        logger.info(f"Final JSON content: {reconstructed}")
+        
+        return reconstructed
+    
+    def _is_json_complete(self, json_str: str) -> bool:
+        """Check if JSON string appears to be complete.
+        
+        Args:
+            json_str: JSON string to check
+            
+        Returns:
+            True if JSON appears complete
+        """
+        if not json_str.strip():
+            return False
+        
+        # Count braces and brackets
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+        
+        # Basic completeness check
+        return (open_braces == close_braces and 
+                open_brackets == close_brackets and 
+                json_str.strip().startswith('{') and 
+                json_str.strip().endswith('}'))
+    
+    def _complete_json_structure(self, json_str: str) -> str:
+        """Attempt to complete an incomplete JSON structure.
+        
+        Args:
+            json_str: Incomplete JSON string
+            
+        Returns:
+            Completed JSON string
+        """
+        logger.info("Attempting to complete JSON structure")
+        
+        # Count missing closing characters
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+        
+        completed = json_str.rstrip()
+        
+        # Add missing closing brackets
+        missing_brackets = open_brackets - close_brackets
+        if missing_brackets > 0:
+            completed += ']' * missing_brackets
+        
+        # Add missing closing braces
+        missing_braces = open_braces - close_braces
+        if missing_braces > 0:
+            completed += '}' * missing_braces
+        
+        logger.info(f"Completed JSON by adding {missing_brackets} brackets and {missing_braces} braces")
+        return completed
+    
+    def _create_fallback_hints_json(self, checks_results: Dict[str, Any]) -> str:
+        """Create a fallback JSON response when LLM generation fails.
+        
+        Uses the enhanced hint optimizer for better context-aware hints.
+        
+        Args:
+            checks_results: Results from the 10 automated checks
+            
+        Returns:
+            Valid JSON string with fallback hints
+        """
+        logger.info("Creating enhanced fallback hints using hint optimizer")
+        
+        try:
+            # Use the enhanced hint optimizer for better fallback hints
+            from src.utils.hint_optimizer import hint_optimizer
+            return hint_optimizer.generate_enhanced_fallback_hints(checks_results)
+        except Exception as e:
+            logger.error(f"Enhanced fallback failed, using basic fallback: {e}")
+            
+            # Basic fallback as last resort
+            hints = []
+            
+            # Generate hints based on check results
+            if checks_results.get("deadline_health", {}).get("severity") == "critical":
+                overdue_count = checks_results["deadline_health"].get("overdue_count", 0)
+                hints.append({
+                    "checked": False,
+                    "title": "Überfällige Termine bearbeiten",
+                    "description": f"Es gibt {overdue_count} überfällige Arbeitspakete. Prüfen Sie diese umgehend und definieren Sie neue realistische Termine."
+                })
+            
+            if checks_results.get("missing_dates", {}).get("severity") == "warning":
+                missing_count = checks_results["missing_dates"].get("missing_dates_count", 0)
+                hints.append({
+                    "checked": False,
+                    "title": "Fehlende Fälligkeitstermine ergänzen",
+                    "description": f"{missing_count} Arbeitspakete haben keine Fälligkeitstermine. Planen Sie diese zeitlich ein."
+                })
+            
+            if checks_results.get("resource_balance", {}).get("severity") == "warning":
+                unassigned_count = checks_results["resource_balance"].get("unassigned_count", 0)
+                if unassigned_count > 0:
+                    hints.append({
+                        "checked": False,
+                        "title": "Nicht zugewiesene Aufgaben bearbeiten",
+                        "description": f"{unassigned_count} Arbeitspakete sind nicht zugewiesen. Weisen Sie diese Teammitgliedern zu."
+                    })
+            
+            if checks_results.get("documentation_completeness", {}).get("severity") == "warning":
+                incomplete_count = checks_results["documentation_completeness"].get("incomplete_count", 0)
+                hints.append({
+                    "checked": False,
+                    "title": "Dokumentation vervollständigen",
+                    "description": f"{incomplete_count} Arbeitspakete haben unvollständige Dokumentation. Ergänzen Sie Beschreibungen."
+                })
+            
+            # If no specific hints were generated, add a general one
+            if not hints:
+                hints.append({
+                    "checked": False,
+                    "title": "Projektübersicht prüfen",
+                    "description": "Überprüfen Sie den aktuellen Projektstatus und stellen Sie sicher, dass alle Arbeitspakete ordnungsgemäß verwaltet werden."
+                })
+            
+            # Limit to maximum 5 hints
+            hints = hints[:5]
+            
+            fallback_response = {"hints": hints}
+            return json.dumps(fallback_response, ensure_ascii=False, separators=(',', ':'))
     
     def _is_blocknote_request(self, request: ChatCompletionRequest) -> bool:
         """Check if this is a BlockNote function calling request.

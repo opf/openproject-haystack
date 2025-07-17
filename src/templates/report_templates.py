@@ -1051,6 +1051,108 @@ class ProjectManagementHintsTemplate:
         )
     
     @staticmethod
+    def create_simple_hints_prompt(
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        checks_results: Dict[str, Any],
+        pmflex_context: str
+    ) -> str:
+        """Create a simplified prompt that asks for structured text instead of JSON.
+        
+        Args:
+            project_id: Project identifier
+            project_type: Type of project
+            openproject_base_url: Base URL of OpenProject instance
+            checks_results: Results from the 10 automated checks
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Complete formatted prompt string for structured text output
+        """
+        # Prepare check results summary in a more readable format
+        checks_summary = []
+        
+        # Process each check and extract key information
+        for check_name, check_data in checks_results.items():
+            if isinstance(check_data, dict) and check_data.get("severity") in ["critical", "warning"]:
+                if check_name == "deadline_health" and check_data.get("overdue_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['overdue_count']} überfällige Arbeitspakete gefunden"
+                    )
+                elif check_name == "missing_dates" and check_data.get("missing_dates_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['missing_dates_count']} Arbeitspakete ohne Fälligkeitstermine"
+                    )
+                elif check_name == "resource_balance":
+                    if check_data.get("unassigned_count", 0) > 0:
+                        checks_summary.append(
+                            f"- WARNUNG: {check_data['unassigned_count']} nicht zugewiesene Arbeitspakete"
+                        )
+                    if check_data.get("overloaded_users", []):
+                        checks_summary.append(
+                            f"- WARNUNG: {len(check_data['overloaded_users'])} überlastete Teammitglieder"
+                        )
+                elif check_name == "progress_drift" and check_data.get("drift_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['drift_count']} Arbeitspakete hinter dem Zeitplan"
+                    )
+                elif check_name == "risks_issues" and check_data.get("unaddressed_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['unaddressed_count']} unbearbeitete Risiken/Probleme"
+                    )
+                elif check_name == "documentation_completeness" and check_data.get("incomplete_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['incomplete_count']} Arbeitspakete mit unvollständiger Dokumentation"
+                    )
+                elif check_name == "dependency_conflicts" and check_data.get("conflicts_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['conflicts_count']} Abhängigkeitskonflikte"
+                    )
+                elif check_name == "stakeholder_responsiveness" and check_data.get("stale_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['stale_count']} Arbeitspakete ohne aktuelle Aktivität"
+                    )
+                elif check_name == "scope_creep" and check_data.get("recent_additions_count", 0) > 5:
+                    checks_summary.append(
+                        f"- INFO: {check_data['recent_additions_count']} neue Arbeitspakete in den letzten 30 Tagen"
+                    )
+                elif check_name == "budget_actuals" and check_data.get("budget_issues_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['budget_issues_count']} Arbeitspakete überschreiten das Budget"
+                    )
+        
+        checks_text = "\n".join(checks_summary) if checks_summary else "Keine kritischen Probleme gefunden."
+        
+        return f"""
+Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik. Generieren Sie konkrete Handlungsempfehlungen auf Deutsch basierend auf folgenden Prüfungsergebnissen:
+
+PROJEKT: {project_id} (Typ: {project_type})
+
+PRÜFUNGSERGEBNISSE:
+{checks_text}
+
+ANWEISUNGEN:
+Erstellen Sie eine nummerierte Liste von maximal 10 konkreten Handlungsempfehlungen. Jede Empfehlung sollte diesem Format folgen:
+
+1. [Kurzer Titel]: [Detaillierte Beschreibung mit konkreten Handlungsschritten]
+
+BEISPIEL:
+1. Überfällige Termine bearbeiten: Es gibt 3 überfällige Arbeitspakete. Führen Sie umgehend Gespräche mit den Verantwortlichen und definieren Sie neue realistische Termine. Prüfen Sie, ob die Arbeitspakete aufgeteilt werden müssen.
+
+WICHTIGE REGELN:
+- Beginnen Sie jede Empfehlung mit einer Nummer gefolgt von einem Punkt
+- Titel sollte kurz und prägnant sein (max. 60 Zeichen)
+- Nach dem Titel folgt ein Doppelpunkt und dann die Beschreibung
+- Beschreibung muss konkrete Schritte und Zahlen aus den Prüfungen enthalten
+- Priorisieren Sie kritische vor Warnhinweisen
+- Verwenden Sie deutsche PMFlex-Terminologie
+- Keine zusätzlichen Erklärungen oder Formatierungen
+
+Generieren Sie jetzt die nummerierten Empfehlungen:
+"""
+    
+    @staticmethod
     def get_hints_template() -> str:
         """Get the German project management hints template.
         
@@ -1118,8 +1220,7 @@ Generieren Sie die Hinweise im folgenden JSON-Format:
       "title": "Fehlende Fälligkeitstermine ergänzen",
       "description": "Y Arbeitspakete haben keine Fälligkeitstermine. Planen Sie diese zeitlich ein oder verschieben Sie sie in den Backlog, falls der Zeitpunkt unbekannt ist."
     }
-  ],
-  "summary": "Das Projekt zeigt insgesamt einen [Status] mit [Anzahl] kritischen und [Anzahl] Warnhinweisen. Schwerpunkt sollte auf der Terminplanung und Ressourcenverteilung liegen."
+  ]
 }
 ```
 
@@ -1141,14 +1242,24 @@ Generieren Sie die Hinweise im folgenden JSON-Format:
 
 Generieren Sie maximal 10 Hinweise, priorisiert nach Wichtigkeit und Dringlichkeit. Die Zusammenfassung soll den Gesamtzustand des Projekts widerspiegeln und die wichtigsten Handlungsfelder benennen.
 
-## WICHTIGE AUSGABE-ANWEISUNGEN:
+## KRITISCHE JSON-AUSGABE-ANWEISUNGEN:
 
-1. **NUR JSON**: Antworten Sie ausschließlich mit gültigem JSON
-2. **KEINE ZUSÄTZLICHEN TEXTE**: Keine Erklärungen vor oder nach dem JSON
-3. **VOLLSTÄNDIGE STRUKTUR**: Stellen Sie sicher, dass das JSON vollständig ist
-4. **GÜLTIGE SYNTAX**: Verwenden Sie korrekte JSON-Syntax mit geschweiften Klammern
+**ABSOLUT ERFORDERLICH - BEFOLGEN SIE DIESE REGELN GENAU:**
 
-BEISPIEL DER ERWARTETEN AUSGABE:
+1. **NUR VOLLSTÄNDIGES JSON**: Antworten Sie ausschließlich mit vollständigem, gültigem JSON
+2. **KEINE ZUSÄTZLICHEN TEXTE**: Absolut keine Erklärungen, Kommentare oder Markdown vor oder nach dem JSON
+3. **VOLLSTÄNDIGE STRUKTUR**: Das JSON MUSS vollständig sein - alle öffnenden Klammern müssen geschlossen werden
+4. **GÜLTIGE SYNTAX**: Verwenden Sie korrekte JSON-Syntax mit geschweiften Klammern und Anführungszeichen
+5. **VOLLSTÄNDIGE GENERIERUNG**: Generieren Sie das JSON bis zum Ende - stoppen Sie NICHT mittendrin
+
+**VERBOTENE AUSGABEN (NIEMALS VERWENDEN):**
+- Unvollständiges JSON wie: `\n  "hints"`
+- JSON ohne öffnende geschweifte Klammer: `"hints": [...]`
+- JSON ohne schließende geschweifte Klammer: `{"hints": [...`
+- Markdown-Blöcke um JSON: `\`\`\`json {...} \`\`\``
+- Erklärungen vor oder nach JSON: `Hier ist das JSON: {...}`
+
+**EXAKTES AUSGABEFORMAT (GENAU SO):**
 ```json
 {
   "hints": [
@@ -1157,10 +1268,43 @@ BEISPIEL DER ERWARTETEN AUSGABE:
       "title": "Beispiel-Hinweis",
       "description": "Dies ist eine Beispielbeschreibung für einen Hinweis."
     }
-  ],
-  "summary": "Beispiel-Zusammenfassung des Projektstatus."
+  ]
 }
 ```
 
-Beginnen Sie Ihre Antwort direkt mit { und enden Sie mit }. Keine anderen Zeichen oder Texte.
+**KRITISCHE REGELN:**
+- Beginnen Sie Ihre Antwort SOFORT mit { (öffnende geschweifte Klammer)
+- Enden Sie Ihre Antwort mit } (schließende geschweifte Klammer)
+- KEINE anderen Zeichen oder Texte vor oder nach dem JSON
+- Das JSON MUSS vollständig und syntaktisch korrekt sein
+- Generieren Sie mindestens 1 und maximal 10 Hinweise
+- Jeder Hinweis MUSS die Felder "checked", "title" und "description" haben
+- "checked" ist immer false
+- "title" maximal 60 Zeichen
+- "description" sollte konkrete Handlungsschritte enthalten
+
+**SPEZIELLE ANWEISUNGEN FÜR STABILE GENERIERUNG:**
+- Verwenden Sie einen einzigen Generierungsvorgang für das gesamte JSON
+- Stoppen Sie NICHT beim Generieren von "hints" - vervollständigen Sie das gesamte JSON
+- Schließen Sie alle Arrays mit ] und alle Objekte mit }
+- Verwenden Sie konsistente Einrückung und Formatierung
+- Testen Sie mental die JSON-Syntax bevor Sie antworten
+
+**WENN SIE DIESE REGELN NICHT BEFOLGEN, WIRD DAS SYSTEM FEHLSCHLAGEN!**
+
+**BEISPIEL EINER KORREKTEN VOLLSTÄNDIGEN ANTWORT:**
+{
+  "hints": [
+    {
+      "checked": false,
+      "title": "Überfällige Termine prüfen",
+      "description": "3 Arbeitspakete sind überfällig. Kontaktieren Sie die Verantwortlichen und definieren Sie neue realistische Termine."
+    },
+    {
+      "checked": false,
+      "title": "Dokumentation vervollständigen",
+      "description": "5 Arbeitspakete haben keine Beschreibung. Ergänzen Sie die fehlenden Informationen."
+    }
+  ]
+}
 """

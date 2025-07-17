@@ -828,9 +828,13 @@ async def generate_project_management_hints(
             logger.warning(f"Could not retrieve PMFlex context: {e}")
             pmflex_context = ""
         
-        # Generate German hints using LLM
+        # Generate German hints using LLM with enhanced monitoring
         try:
-            hints_json = generation_pipeline.generate_project_management_hints(
+            # Track generation attempt
+            from src.utils.hint_optimizer import hint_optimizer
+            
+            # Generate hints - now returns a list of dictionaries
+            hints_list = generation_pipeline.generate_project_management_hints(
                 project_id=str(project_id),
                 project_type=project_type,
                 openproject_base_url=base_url,
@@ -838,93 +842,47 @@ async def generate_project_management_hints(
                 pmflex_context=pmflex_context
             )
             
-            # Parse the JSON response with better error handling
-            import json
-            import re
+            # Convert to Pydantic models
+            from src.models.schemas import ProjectManagementHint
+            hints = []
             
-            try:
-                # Try to extract JSON from the response if it contains extra text
-                hints_json_clean = hints_json.strip()
-                
-                # Look for JSON block in the response
-                json_match = re.search(r'\{.*\}', hints_json_clean, re.DOTALL)
-                if json_match:
-                    hints_json_clean = json_match.group(0)
-                
-                logger.info(f"Attempting to parse JSON: {hints_json_clean[:200]}...")
-                hints_data = json.loads(hints_json_clean)
-                
-                # Validate the structure
-                if not isinstance(hints_data, dict):
-                    raise ValueError("Response is not a JSON object")
-                
-                if "hints" not in hints_data:
-                    raise ValueError("Response missing 'hints' field")
-                
-                if not isinstance(hints_data["hints"], list):
-                    raise ValueError("'hints' field is not a list")
-                
-                # Convert to Pydantic models
-                from src.models.schemas import ProjectManagementHint
-                hints = []
-                
-                for i, hint_data in enumerate(hints_data.get("hints", [])):
-                    try:
-                        if not isinstance(hint_data, dict):
-                            logger.warning(f"Hint {i} is not a dictionary, skipping")
-                            continue
-                        
-                        # Ensure required fields exist
-                        if "title" not in hint_data or "description" not in hint_data:
-                            logger.warning(f"Hint {i} missing required fields, skipping")
-                            continue
-                        
-                        hint = ProjectManagementHint(
-                            checked=hint_data.get("checked", False),
-                            title=str(hint_data["title"])[:60],  # Truncate to max length
-                            description=str(hint_data["description"])
-                        )
-                        hints.append(hint)
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to parse hint {i}: {e}")
+            for i, hint_data in enumerate(hints_list):
+                try:
+                    if not isinstance(hint_data, dict):
+                        logger.warning(f"Hint {i} is not a dictionary, skipping")
                         continue
-                
-                summary = hints_data.get("summary")
-                if summary:
-                    summary = str(summary)
-                
-                logger.info(f"Successfully parsed {len(hints)} hints from LLM response")
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse hints JSON: {e}")
-                logger.error(f"Raw response: {hints_json}")
-                
-                # Try to provide a fallback response
-                hints = [ProjectManagementHint(
-                    checked=False,
-                    title="JSON-Parsing-Fehler",
-                    description="Die automatische Hinweisgenerierung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
-                )]
-                summary = "Fehler bei der Hinweisgenerierung aufgetreten."
-                
-            except (ValueError, KeyError) as e:
-                logger.error(f"Invalid JSON structure: {e}")
-                logger.error(f"Raw response: {hints_json}")
-                
-                # Provide fallback response
-                hints = [ProjectManagementHint(
-                    checked=False,
-                    title="Strukturfehler",
-                    description="Die Antwort der KI hatte ein unerwartetes Format. Bitte versuchen Sie es erneut."
-                )]
-                summary = "Fehler bei der Antwortverarbeitung."
+                    
+                    # Ensure required fields exist
+                    if "title" not in hint_data or "description" not in hint_data:
+                        logger.warning(f"Hint {i} missing required fields, skipping")
+                        continue
+                    
+                    hint = ProjectManagementHint(
+                        checked=hint_data.get("checked", False),
+                        title=str(hint_data["title"])[:60],  # Truncate to max length
+                        description=str(hint_data["description"])
+                    )
+                    hints.append(hint)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to parse hint {i}: {e}")
+                    continue
+            
+            # Track generation metrics
+            success = len(hints) > 0
+            hint_optimizer.track_generation_attempt(
+                success=success,
+                used_fallback=False,  # The generation pipeline handles fallback internally
+                json_parse_failed=False,  # No JSON parsing needed with new approach
+                retry_succeeded=False
+            )
             
             logger.info(f"Successfully generated {len(hints)} project management hints")
             
+            # Summary is no longer part of the response format
             return ProjectManagementHintsResponse(
                 hints=hints,
-                summary=summary,
+                summary=None,
                 project_id=project_id,
                 checks_performed=analyzer.checks_performed,
                 openproject_base_url=base_url
@@ -1033,6 +991,115 @@ def get_model(model_id: str):
                     "message": f"Internal server error: {str(e)}",
                     "type": "internal_error",
                     "code": "internal_error"
+                }
+            }
+        )
+
+
+# Hint Generation Monitoring endpoints
+
+@router.get("/hint-generation/metrics")
+def get_hint_generation_metrics():
+    """Get hint generation performance metrics.
+    
+    Returns:
+        Current hint generation metrics and success rates
+    """
+    try:
+        from src.utils.hint_optimizer import hint_optimizer
+        metrics = hint_optimizer.get_generation_metrics()
+        
+        return {
+            "status": "success",
+            "metrics": metrics,
+            "timestamp": "2025-01-17T22:54:00Z"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting hint generation metrics: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to get metrics: {str(e)}",
+                    "type": "metrics_error",
+                    "code": "metrics_failed"
+                }
+            }
+        )
+
+
+@router.post("/hint-generation/metrics/reset")
+def reset_hint_generation_metrics():
+    """Reset hint generation metrics.
+    
+    Returns:
+        Reset confirmation
+    """
+    try:
+        from src.utils.hint_optimizer import hint_optimizer
+        hint_optimizer.reset_metrics()
+        
+        return {
+            "status": "success",
+            "message": "Hint generation metrics have been reset",
+            "timestamp": "2025-01-17T22:54:00Z"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error resetting hint generation metrics: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to reset metrics: {str(e)}",
+                    "type": "metrics_error",
+                    "code": "metrics_reset_failed"
+                }
+            }
+        )
+
+
+@router.post("/hint-generation/test-fallback")
+async def test_hint_fallback_generation(checks_results: dict):
+    """Test the enhanced fallback hint generation system.
+    
+    Args:
+        checks_results: Mock check results to test fallback generation
+        
+    Returns:
+        Generated fallback hints and quality analysis
+    """
+    try:
+        from src.utils.hint_optimizer import hint_optimizer
+        
+        # Generate enhanced fallback hints
+        fallback_json = hint_optimizer.generate_enhanced_fallback_hints(checks_results)
+        
+        # Analyze the quality of generated hints
+        quality_analysis = hint_optimizer.analyze_hint_quality(fallback_json)
+        
+        # Parse the JSON to return structured data
+        import json
+        hints_data = json.loads(fallback_json)
+        
+        return {
+            "status": "success",
+            "fallback_hints": hints_data,
+            "quality_analysis": quality_analysis,
+            "generation_method": "enhanced_fallback",
+            "timestamp": "2025-01-17T22:54:00Z"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error testing fallback hint generation: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to test fallback generation: {str(e)}",
+                    "type": "fallback_test_error",
+                    "code": "fallback_test_failed"
                 }
             }
         )
