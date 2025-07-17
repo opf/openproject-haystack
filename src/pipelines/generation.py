@@ -96,6 +96,12 @@ class GenerationPipeline:
         Returns:
             Tuple of (generated_response, usage_info)
         """
+        # Force override model to mixtral:8x7b
+        original_model = request.model
+        request.model = "mixtral:8x7b"
+        if original_model != request.model:
+            logger.info(f"Model override: {original_model} -> {request.model}")
+        
         # Check if this is a BlockNote function calling request
         if self._is_blocknote_request(request):
             return self._handle_blocknote_function_call(request)
@@ -103,9 +109,9 @@ class GenerationPipeline:
         # Convert messages to a single prompt
         prompt = self._messages_to_prompt(request.messages)
         
-        # Create generator with request-specific parameters
+        # Create generator with forced mixtral:8x7b model
         generator = OllamaGenerator(
-            model=request.model,
+            model="mixtral:8x7b",  # Force mixtral:8x7b
             url=settings.OLLAMA_URL,
             generation_kwargs={
                 "num_predict": request.max_tokens,
@@ -851,7 +857,7 @@ class GenerationPipeline:
         
         # Create generator with BlockNote-specific parameters optimized for substantial content
         generator = OllamaGenerator(
-            model=request.model,
+            model="mixtral:8x7b",  # Force mixtral:8x7b for BlockNote
             url=settings.OLLAMA_URL,
             generation_kwargs={
                 "num_predict": request.max_tokens or 3500,  # Significantly increased to ensure JSON completion

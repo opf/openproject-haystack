@@ -36,7 +36,7 @@ services:
   #     - ./scripts:/scripts:ro
   #   environment:
   #     - OLLAMA_HOST=http://ollama:11434
-  #     - MODELS_TO_PULL=${MODELS_TO_PULL:-mistral:latest}
+  #     - MODELS_TO_PULL=${MODELS_TO_PULL:-mixtral:8x7b}
   #   depends_on:
   #     ollama:
   #       condition: service_healthy
@@ -60,9 +60,9 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - OLLAMA_URL=http://localhost:11434
-      - OLLAMA_MODEL=mistral:latest
-      - MODELS_TO_PULL=mistral:latest
-      - REQUIRED_MODELS=mistral:latest
+      - OLLAMA_MODEL=mixtral:8x7b
+      - MODELS_TO_PULL=mixtral:8x7b
+      - REQUIRED_MODELS=mixtral:8x7b
       - GENERATION_NUM_PREDICT=1000
       - GENERATION_TEMPERATURE=0.8
     deploy:
