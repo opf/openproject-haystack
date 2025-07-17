@@ -279,7 +279,7 @@ async def generate_project_status_report(
             api_key=user_token
         )
 
-        logger.info(f"Generating project status report for project {project_id}")
+        logger.info(f"Generating project status report for project {project_id} (type: {project_type})")
 
         # Fetch work packages from OpenProject
         try:
