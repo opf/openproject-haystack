@@ -21,6 +21,21 @@ class HealthResponse(BaseModel):
     status: str
 
 
+# --- Suggestion Schemas ---
+class CandidateSuggestion(BaseModel):
+    name: Optional[str] = None
+    score: Optional[float] = None
+    project_id: int
+    reason: str
+
+class SuggestRequest(BaseModel):
+    project_id: int
+
+class SuggestResponse(BaseModel):
+    portfolio: Optional[str] = None
+    candidates: List[CandidateSuggestion]
+    text: str
+
 # OpenAI Chat Completion Compatible Models
 
 class ChatMessage(BaseModel):
@@ -126,6 +141,9 @@ class WorkPackage(BaseModel):
     updated_at: str
     description: Optional[Dict[str, Any]] = None
 
+class ProjectSimilarityRequest(BaseModel):
+    project: ProjectInfo
+    openproject: OpenProjectInfo
 
 class ProjectStatusReportResponse(BaseModel):
     """Response model for project status report."""

@@ -68,6 +68,43 @@ This ensures that your application always has the required models available and 
 
 ### Project Management Endpoints
 - `POST /generate-project-status-report` - Generate project status report from OpenProject data
+### Evaluate Projects Similarities
+
+**POST** `/evaluate-projects-similarities`
+
+**Request Body:**
+```json
+{
+  "project": {
+    "id": "YOUR_PORTFOLIO_PROJECT_ID",
+    "type": "portfolio" # should be portfolio
+  },
+  "openproject": {
+    "base_url": "https://your-openproject-instance.com",
+    "user_token": "YOUR_OPENPROJECT_API_KEY"
+  }
+}
+```
+
+**Response Example:**
+```json
+{
+  "portfolio": "Portfolio Project Name",
+  "candidates": [
+    {
+      "name": "Candidate Project 1",
+      "score": 85.0,
+      "project_id": "123",
+      "reason": "Strong alignment with portfolio goals."
+    }
+  ],
+  "text": "...LLM explanation..."
+}
+```
+
+**Note:**
+- The `project` object only requires an `id` field. The `type` field is no longer used.
+- The `openproject` object must be provided with each request and contains the OpenProject instance URL and user API token.
 
 ## OpenAI API Compatibility
 
