@@ -20,13 +20,14 @@ def test_project_status_report():
     # Example request data - updated to match current API structure
     payload = {
         "project": {
-            "id": 1,  # Replace with actual project ID
+            "id": 8,  # Replace with actual project ID
             "type": "project"  # or "portfolio", "program"
         },
         "openproject": {
-            "base_url": "https://your-openproject-instance.com",  # Replace with actual URL
-            "user_token": "your-api-token-here"  # Replace with actual token
-        }
+            "base_url": "https://pmflex.one/",  # Replace with actual URL
+            "user_token": "881dc9aef285ee58c1265ccb5de5272e54608bc7a9acbfe575294b35c72607c8"  # Replace with actual token
+        },
+        "debug": "true"
     }
     
     headers = HEADERS
