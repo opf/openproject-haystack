@@ -380,15 +380,124 @@ class GenerationPipeline:
         # Convert messages to prompt
         base_prompt = self._messages_to_prompt(messages)
         
-        # Add BlockNote-specific instructions
-        blocknote_instructions = f"""
+        # Detect the type of request to apply appropriate prompting strategy
+        request_type = self._detect_request_type(messages)
+        
+        if request_type == "simple_operation":
+            # Use minimal prompting for simple operations like translations
+            blocknote_instructions = self._get_simple_operation_instructions()
+        else:
+            # Use comprehensive prompting for content creation
+            blocknote_instructions = self._get_comprehensive_content_instructions()
+        
+        return base_prompt + blocknote_instructions
+    
+    def _detect_request_type(self, messages: List[ChatMessage]) -> str:
+        """Detect the type of request to apply appropriate prompting strategy.
+        
+        Args:
+            messages: Chat messages to analyze
+            
+        Returns:
+            Request type: "simple_operation" or "content_creation"
+        """
+        # Get the last user message to analyze the request
+        user_messages = [msg for msg in messages if msg.role == "user"]
+        if not user_messages:
+            return "content_creation"
+        
+        last_message = user_messages[-1].content.lower()
+        
+        # Keywords that indicate simple operations
+        simple_operation_keywords = [
+            "translate", "übersetze", "übersetzung", "translation",
+            "format", "formatiere", "formatting",
+            "fix", "correct", "korrigiere", "korrektur",
+            "change", "ändere", "ändern", "replace", "ersetze",
+            "bold", "italic", "fett", "kursiv",
+            "uppercase", "lowercase", "großbuchstaben", "kleinbuchstaben"
+        ]
+        
+        # Check if the request contains simple operation keywords
+        for keyword in simple_operation_keywords:
+            if keyword in last_message:
+                logger.info(f"Detected simple operation request: {keyword}")
+                return "simple_operation"
+        
+        # Check for translation patterns
+        translation_patterns = [
+            r"translate.*to\s+\w+",
+            r"übersetze.*ins?\s+\w+",
+            r"in\s+\w+\s+übersetzen",
+            r"to\s+\w+\s+translation"
+        ]
+        
+        for pattern in translation_patterns:
+            if re.search(pattern, last_message):
+                logger.info(f"Detected translation request: {pattern}")
+                return "simple_operation"
+        
+        # Default to content creation for comprehensive responses
+        logger.info("Detected content creation request")
+        return "content_creation"
+    
+    def _get_simple_operation_instructions(self) -> str:
+        """Get instructions for simple operations like translations.
+        
+        Returns:
+            Simple operation instructions
+        """
+        return """
 
 CRITICAL JSON COMPLETION REQUIREMENTS:
 - You MUST respond with ONLY complete, valid JSON that matches the exact schema
 - NO explanatory text, NO markdown, NO comments, NO incomplete responses
 - The JSON MUST be complete with all opening and closing braces, brackets, and quotes
 - NEVER stop generating until the JSON is completely finished
-- End your response with the final closing brace }}
+- End your response with the final closing brace }
+
+SIMPLE OPERATION REQUIREMENTS:
+- For translations: Replace ONLY with the translated text, add NOTHING else
+- For formatting: Apply ONLY the requested formatting change
+- For corrections: Make ONLY the necessary corrections
+- DO NOT add explanations, headers, disclaimers, or additional content
+- DO NOT generate comprehensive content - keep it minimal and focused
+- ONLY perform the specific operation requested by the user
+
+JSON SCHEMA REQUIREMENTS:
+- Root object MUST have "operations" array
+- Each operation MUST have "type" field: "update", "add", or "delete"
+- Update operations MUST have: type, id, block (where block is a single HTML string)
+- Add operations MUST have: type, referenceId, position, blocks (where blocks is array of HTML strings)
+- Delete operations MUST have: type, id
+- ALL strings must be properly escaped and quoted
+- ALL objects and arrays must be properly closed
+
+CRITICAL RULES:
+- Block IDs must be preserved exactly (including trailing $)
+- For simple operations, typically use only ONE "update" operation
+- The "block" content should contain ONLY the result of the operation
+- DO NOT add extra blocks or additional content
+
+Example for translation:
+{"operations":[{"type":"update","id":"block-id$","block":"<p>Dies ist auf Deutsch</p>"}]}
+
+RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
+    
+    def _get_comprehensive_content_instructions(self) -> str:
+        """Get instructions for comprehensive content creation.
+        
+        Returns:
+            Comprehensive content instructions
+        """
+        return """
+
+CRITICAL JSON COMPLETION REQUIREMENTS:
+- You MUST respond with ONLY complete, valid JSON that matches the exact schema
+- NO explanatory text, NO markdown, NO comments, NO incomplete responses
+- The JSON MUST be complete with all opening and closing braces, brackets, and quotes
+- NEVER stop generating until the JSON is completely finished
+- End your response with the final closing brace }
 
 CONTENT GENERATION REQUIREMENTS:
 - Generate COMPREHENSIVE, DETAILED content - not just titles or brief summaries
@@ -421,11 +530,9 @@ CRITICAL RULES:
 - ALWAYS complete the entire JSON structure - incomplete JSON will cause errors
 
 Example of COMPLETE JSON for substantial content:
-{{"operations":[{{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"}},{{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives. This system of governance has evolved over centuries and represents one of humanity's most significant political achievements.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights. These principles ensure that all citizens have an equal voice in the political process while protecting the rights of those who may be in the minority.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>","<ul><li>Rule of law and independent judiciary</li></ul>","<ul><li>Freedom of speech, press, and assembly</li></ul>"]}}]}}
+{"operations":[{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"},{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives. This system of governance has evolved over centuries and represents one of humanity's most significant political achievements.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights. These principles ensure that all citizens have an equal voice in the political process while protecting the rights of those who may be in the minority.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>","<ul><li>Rule of law and independent judiciary</li></ul>","<ul><li>Freedom of speech, press, and assembly</li></ul>"]}]}
 
 RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
-        
-        return base_prompt + blocknote_instructions
     
     def _process_blocknote_response(self, response_text: str, json_tool: Tool) -> str:
         """Process and validate BlockNote response.
