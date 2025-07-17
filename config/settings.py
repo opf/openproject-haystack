@@ -13,7 +13,7 @@ class Settings:
 
     # Ollama configuration
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://ollama:11434")
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral:7B")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "gemma:2b")
 
     # Model management
     MODELS_TO_PULL: str = os.getenv("MODELS_TO_PULL", "mistral:latest")
@@ -26,7 +26,7 @@ class Settings:
     # API configuration
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
-    
+
     # RAG Configuration
     DOCUMENTS_PATH: str = os.getenv("DOCUMENTS_PATH", "documents")
     VECTOR_STORE_PATH: str = os.getenv("VECTOR_STORE_PATH", "vector_store")
@@ -35,10 +35,5 @@ class Settings:
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "800"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
     MAX_RETRIEVED_DOCS: int = int(os.getenv("MAX_RETRIEVED_DOCS", "5"))
-
-    # OpenProject configuration
-    OPENPROJECT_BASE_URL: str = os.getenv("OPENPROJECT_BASE_URL", "")
-    OPENPROJECT_API_KEY: str = os.getenv("OPENPROJECT_API_KEY", "")
-
 
 settings = Settings()

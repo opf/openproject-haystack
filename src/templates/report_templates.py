@@ -263,7 +263,7 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         openproject_base_url: str,
         work_packages: List[WorkPackage],
         analysis: Dict[str, Any],
-        pmflex_context: str
+        pmflex_context: str = ""
     ) -> str:
         """Create an enhanced prompt with PMFlex RAG context.
 

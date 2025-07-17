@@ -12,7 +12,6 @@ from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
 import uuid
 import logging
-from src.pipelines.suggestion import pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -458,7 +457,14 @@ def get_model(model_id: str):
 @router.post("/evaluate-projects-similarities", response_model=SuggestResponse)
 def suggest_endpoint(request: SuggestRequest):
     try:
-        result = pipeline.suggest(str(request.project_id))
+        # Use OpenProject info from the request, not from config
+        openproject_client = OpenProjectClient(
+            base_url=request.openproject.base_url,
+            api_key=request.openproject.user_token
+        )
+        from src.pipelines.suggestion import SuggestionPipeline
+        suggestion_pipeline = SuggestionPipeline(openproject_client)
+        result = suggestion_pipeline.suggest(str(request.project.id))
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
