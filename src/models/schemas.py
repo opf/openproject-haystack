@@ -94,7 +94,6 @@ class ErrorResponse(BaseModel):
 class ProjectInfo(BaseModel):
     """Project information model."""
     id: Union[int, str] = Field(..., description="OpenProject project ID")
-    type: str = Field(..., description="Project type (e.g., 'portfolio')")
 
 class OpenProjectInfo(BaseModel):
     """OpenProject instance information model."""
@@ -105,6 +104,10 @@ class ProjectStatusReportRequest(BaseModel):
     """Request model for project status report generation."""
     project: ProjectInfo = Field(..., description="Project information")
     openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+
+class ProjectSimilarityRequest(BaseModel):
+    project: ProjectInfo
+    openproject: OpenProjectInfo
 
 class WorkPackage(BaseModel):
     """Model for OpenProject work package data."""

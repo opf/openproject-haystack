@@ -272,6 +272,3 @@ class SuggestionPipeline:
             "project_id": c.project_id,
             "reason": c.reason
         }
-
-# Global pipeline instance for import convenience
-pipeline = SuggestionPipeline(OpenProjectClient(settings.OPENPROJECT_BASE_URL, settings.OPENPROJECT_API_KEY))

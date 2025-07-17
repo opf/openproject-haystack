@@ -455,7 +455,7 @@ def get_model(model_id: str):
         )
 
 @router.post("/evaluate-projects-similarities", response_model=SuggestResponse)
-def suggest_endpoint(request: SuggestRequest):
+def suggest_endpoint(request: ProjectSimilarityRequest):
     try:
         # Use OpenProject info from the request, not from config
         openproject_client = OpenProjectClient(
