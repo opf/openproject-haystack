@@ -52,12 +52,11 @@ class OpenProjectClient:
             OpenProjectAPIError: If API request fails
         """
         url = f"{self.base_url}/api/v3/projects/{project_id}/work_packages"
-
+        headers = self.headers.copy()  # Use a copy to avoid modifying self.headers
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 logger.info(f"Fetching work packages from: {url}")
-
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=headers)
 
                 if response.status_code == 401:
                     raise OpenProjectAPIError(

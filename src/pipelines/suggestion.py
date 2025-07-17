@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 from config.settings import settings
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Candidate:
-    project_id: Any
+    project_id: Union[str, int]
     name: str
     score: Optional[float]
     reason: str
