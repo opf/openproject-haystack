@@ -334,13 +334,13 @@ class GenerationPipeline:
         # Create enhanced prompt for BlockNote operations
         prompt = self._create_blocknote_prompt(request.messages, json_tool)
         
-        # Create generator with BlockNote-specific parameters
+        # Create generator with BlockNote-specific parameters optimized for substantial content
         generator = OllamaGenerator(
             model=request.model,
             url=settings.OLLAMA_URL,
             generation_kwargs={
-                "num_predict": request.max_tokens or 1000,
-                "temperature": request.temperature or 0.1,  # Lower temperature for more consistent JSON
+                "num_predict": request.max_tokens or 2000,  # Increased for more comprehensive content
+                "temperature": request.temperature or 0.2,  # Slightly higher for more creative content
                 "top_p": request.top_p or 0.9,
                 "stop": request.stop or [],
                 "format": "json"  # Request JSON format if supported by Ollama
@@ -385,6 +385,19 @@ class GenerationPipeline:
 
 CRITICAL: You must respond with ONLY valid JSON that matches the exact schema. No explanatory text, no markdown, no comments.
 
+CONTENT GENERATION REQUIREMENTS:
+- Generate COMPREHENSIVE, DETAILED content - not just titles or brief summaries
+- Create substantial, informative content that fully addresses the user's request
+- For essays, articles, or explanations: provide multiple paragraphs with detailed information
+- For lists: include detailed descriptions, not just simple items
+- Match the depth and quality of professional content (like OpenAI GPT-4)
+
+DOCUMENT MANIPULATION STRATEGY:
+- If document is empty (has <p></p>): UPDATE the empty block with substantial content, then ADD more blocks for comprehensive coverage
+- For longer content: Use multiple operations to create well-structured documents
+- Break content into logical paragraphs using separate blocks
+- Create proper document flow with headings, paragraphs, and lists as appropriate
+
 Schema requirements:
 - Root object must have "operations" array
 - Each operation must have "type" field: "update", "add", or "delete"
@@ -396,10 +409,11 @@ IMPORTANT RULES:
 - Block IDs must be preserved exactly (including trailing $)
 - Each list item should be a separate block: <ul><li>item</li></ul>
 - The "blocks" field in add operations must be an array of HTML strings, not objects
-- Use simple HTML: <ul><li>Mercury</li></ul>, <ul><li>Venus</li></ul>, etc.
+- Use rich HTML: <h1>, <h2>, <p>, <ul><li>, <strong>, <em> as appropriate
+- Generate multiple blocks for comprehensive content
 
-Example valid response:
-{{"operations":[{{"type":"add","referenceId":"82ec1e48-07ee-4cfa-85e5-da9bf669cbf2$","position":"after","blocks":["<ul><li>Mercury</li></ul>","<ul><li>Venus</li></ul>","<ul><li>Earth</li></ul>"]}}]}}
+Example for substantial content:
+{{"operations":[{{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"}},{{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives. This system of governance has evolved over centuries and represents one of humanity's most significant political achievements.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights. These principles ensure that all citizens have an equal voice in the political process while protecting the rights of those who may be in the minority.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>","<ul><li>Rule of law and independent judiciary</li></ul>","<ul><li>Freedom of speech, press, and assembly</li></ul>"]}}]}}
 
 Respond with ONLY valid JSON:"""
         
