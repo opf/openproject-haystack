@@ -1,7 +1,7 @@
 """Report templates for project status report generation."""
 
 from typing import List, Dict, Any
-from src.api.schemas import WorkPackage
+from src.models.schemas import WorkPackage
 from datetime import datetime, timedelta
 import json
 
@@ -266,7 +266,7 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         pmflex_context: str
     ) -> str:
         """Create an enhanced prompt with PMFlex RAG context.
-        
+
         Args:
             project_id: Project identifier
             project_type: Type of project (portfolio, program, project)
@@ -274,18 +274,18 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             work_packages: List of work packages
             analysis: Analysis results from ProjectReportAnalyzer
             pmflex_context: PMFlex context from RAG system
-            
+
         Returns:
             Complete formatted prompt string with RAG enhancement
         """
         template = ProjectStatusReportTemplate.get_enhanced_template()
-        
+
         # Format analysis data as JSON for better structure
         analysis_json = json.dumps(analysis, indent=2, default=str)
-        
+
         # Create work packages summary
         work_packages_summary = ProjectStatusReportTemplate.format_work_packages_summary(work_packages)
-        
+
         return template.format(
             project_id=project_id,
             project_type=project_type,
@@ -296,11 +296,11 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             work_packages_summary=work_packages_summary,
             pmflex_context=pmflex_context or "No PMFlex context available."
         )
-    
+
     @staticmethod
     def get_enhanced_template() -> str:
         """Get the enhanced project status report template with PMFlex context.
-        
+
         Returns:
             Template string for LLM prompt with RAG enhancement
         """
@@ -381,7 +381,7 @@ Identify issues requiring decisions or escalation:
 
 The report should reflect PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration. Prioritize clarity and actionable information for project stakeholders and governance bodies.
 """
-    
+
     @staticmethod
     def get_custom_template(template_name: str) -> str:
         """Get a custom report template by name.
