@@ -748,6 +748,9 @@ class OpenProjectClient:
                 "href": None
             }
         
+        # Extract type information
+        type_info = self._extract_field_info(wp_data, "type", wp_id, "Type")
+        
         # Extract priority information
         priority = None
         if "priority" in wp_data and wp_data["priority"]:
@@ -778,6 +781,7 @@ class OpenProjectClient:
         return WorkPackage(
             id=wp_data["id"],
             subject=wp_data.get("subject", ""),
+            type=type_info,
             status=status,
             priority=priority,
             assignee=assignee,
@@ -846,6 +850,7 @@ class OpenProjectClient:
         return WorkPackage(
             id=wp_data["id"],
             subject=wp_data.get("subject", ""),
+            type=type_info,
             status=status,
             priority=priority,
             assignee=assignee,

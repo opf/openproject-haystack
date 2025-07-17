@@ -30,6 +30,7 @@ class ProjectReportAnalyzer:
                 "total_count": 0,
                 "status_distribution": {},
                 "priority_distribution": {},
+                "type_distribution": {},
                 "completion_stats": {},
                 "assignee_workload": {},
                 "timeline_insights": {},
@@ -98,6 +99,16 @@ class ProjectReportAnalyzer:
             priority_name = wp.priority.get("name", "No Priority") if wp.priority else "No Priority"
             priority_distribution[priority_name] = priority_distribution.get(priority_name, 0) + 1
         
+        # Type distribution
+        type_distribution = {}
+        for wp in work_packages:
+            type_name = wp.type.get("name", "No Type") if wp.type else "No Type"
+            type_distribution[type_name] = type_distribution.get(type_name, 0) + 1
+        
+        logger.info("Type distribution analysis completed:")
+        for type_name, count in type_distribution.items():
+            logger.info(f"  - '{type_name}': {count} work packages")
+        
         # Completion statistics
         completion_ratios = [wp.done_ratio for wp in work_packages if wp.done_ratio is not None]
         avg_completion = sum(completion_ratios) / len(completion_ratios) if completion_ratios else 0
@@ -157,6 +168,7 @@ class ProjectReportAnalyzer:
             "total_count": total_count,
             "status_distribution": status_distribution,
             "priority_distribution": priority_distribution,
+            "type_distribution": type_distribution,
             "completion_stats": completion_stats,
             "assignee_workload": assignee_workload,
             "timeline_insights": timeline_insights,
@@ -498,10 +510,18 @@ class ProjectManagementAnalyzer:
         unaddressed_items = []
         
         for wp in work_packages:
-            wp_type = wp.status.get("name", "").lower() if wp.status else ""
+            # Check both type and status for risk/issue identification
+            wp_type = wp.type.get("name", "").lower() if wp.type else ""
+            wp_status = wp.status.get("name", "").lower() if wp.status else ""
             
-            # Check if it's a risk or bug type work package
-            if any(keyword in wp_type for keyword in ["risk", "bug", "issue", "problem"]):
+            # Check if it's a risk or bug type work package (prioritize type field)
+            type_keywords = ["risk", "bug", "issue", "problem", "defect", "incident", "vulnerability"]
+            is_risk_or_issue = (
+                any(keyword in wp_type for keyword in type_keywords) or
+                any(keyword in wp_status for keyword in type_keywords)
+            )
+            
+            if is_risk_or_issue:
                 # Check if it's still open and past due date
                 if wp.done_ratio != 100:
                     is_overdue = False
@@ -517,7 +537,7 @@ class ProjectManagementAnalyzer:
                         unaddressed_items.append({
                             "id": wp.id,
                             "subject": wp.subject,
-                            "type": wp_type,
+                            "type": wp_type if wp_type else wp_status,
                             "due_date": wp.due_date,
                             "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
                             "issue_type": "overdue" if is_overdue else "no_assignee"
@@ -738,13 +758,14 @@ Formatieren Sie den Bericht professionell, klar und umsetzbar. Verwenden Sie Auf
         
         for i, wp in enumerate(sorted_packages[:limit], 1):
             status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
+            type_name = wp.type.get("name", "Unknown") if wp.type else "Unknown"
             priority_name = wp.priority.get("name", "Normal") if wp.priority else "Normal"
             assignee_name = wp.assignee.get("name", "Unassigned") if wp.assignee else "Unassigned"
             completion = wp.done_ratio if wp.done_ratio is not None else 0
             
             summary_lines.append(
                 f"{i}. [{wp.id}] {wp.subject}\n"
-                f"   Status: {status_name} | Priority: {priority_name} | "
+                f"   Type: {type_name} | Status: {status_name} | Priority: {priority_name} | "
                 f"Assignee: {assignee_name} | Progress: {completion}%"
             )
             

@@ -186,6 +186,7 @@ class WorkPackage(BaseModel):
     """Model for OpenProject work package data."""
     id: int
     subject: str
+    type: Optional[Dict[str, Any]] = None
     status: Dict[str, Any]
     priority: Optional[Dict[str, Any]] = None
     assignee: Optional[Dict[str, Any]] = None
