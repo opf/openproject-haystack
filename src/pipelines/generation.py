@@ -440,7 +440,7 @@ class GenerationPipeline:
                 merged.append(hint)
                 seen_titles.add(title_lower)
         
-        return merged[:10]  # Ensure max 10 hints
+        return merged[:5]  # Ensure max 5 hints
     
     def _clean_json_response(self, response: str) -> str:
         """Clean and extract JSON from LLM response.

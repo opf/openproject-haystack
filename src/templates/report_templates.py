@@ -1133,7 +1133,7 @@ PRÜFUNGSERGEBNISSE:
 {checks_text}
 
 ANWEISUNGEN:
-Erstellen Sie eine nummerierte Liste von maximal 10 konkreten Handlungsempfehlungen. Jede Empfehlung sollte diesem Format folgen:
+Erstellen Sie eine nummerierte Liste von maximal 5 konkreten Handlungsempfehlungen. Jede Empfehlung sollte diesem Format folgen:
 
 1. [Kurzer Titel]: [Detaillierte Beschreibung mit konkreten Handlungsschritten]
 
