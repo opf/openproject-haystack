@@ -5,7 +5,8 @@ from src.models.schemas import (
     GenerationRequest, GenerationResponse, HealthResponse,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatChoice,
     Usage, ModelsResponse, ModelInfo, ErrorResponse, ErrorDetail,
-    ProjectStatusReportRequest, ProjectStatusReportResponse
+    ProjectStatusReportRequest, ProjectStatusReportResponse,
+    ProjectManagementHintsRequest, ProjectManagementHintsResponse
 )
 from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
@@ -365,6 +366,313 @@ async def generate_project_status_report(
         raise
     except Exception as e:
         logger.error(f"Unexpected error in project status report generation: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Internal server error: {str(e)}",
+                    "type": "internal_error",
+                    "code": "internal_error"
+                }
+            }
+        )
+
+
+# Project Management Hints endpoint
+
+@router.post("/project-management-hints", response_model=ProjectManagementHintsResponse)
+async def generate_project_management_hints(
+    request: ProjectManagementHintsRequest
+):
+    """Generate German project management hints based on automated checks.
+    
+    Args:
+        request: Project management hints request with project info and OpenProject instance info
+        
+    Returns:
+        Generated project management hints in German
+    """
+    try:
+        # Extract values from the request structure
+        project_id = request.project.id
+        project_type = request.project.type
+        base_url = request.openproject.base_url
+        user_token = request.openproject.user_token
+        
+        # Validate user token
+        if not user_token:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": {
+                        "message": "OpenProject user token is required",
+                        "type": "authentication_error",
+                        "code": "missing_user_token"
+                    }
+                }
+            )
+        
+        # Initialize OpenProject client
+        openproject_client = OpenProjectClient(
+            base_url=base_url,
+            api_key=user_token
+        )
+        
+        logger.info(f"Generating project management hints for project {project_id} (type: {project_type})")
+        
+        # Fetch comprehensive project data from OpenProject
+        try:
+            # Fetch work packages
+            work_packages = await openproject_client.get_work_packages(str(project_id))
+            logger.info(f"Fetched {len(work_packages)} work packages")
+            
+            # Fetch additional data for the 10 checks
+            relations = await openproject_client.get_work_package_relations(str(project_id))
+            time_entries = await openproject_client.get_time_entries(str(project_id))
+            users = await openproject_client.get_users()
+            
+            # Fetch journals and attachments for each work package
+            journals_data = {}
+            attachments_data = {}
+            
+            for wp in work_packages:
+                try:
+                    journals_data[wp.id] = await openproject_client.get_work_package_journals(wp.id)
+                    attachments_data[wp.id] = await openproject_client.get_work_package_attachments(wp.id)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch additional data for work package {wp.id}: {e}")
+                    journals_data[wp.id] = []
+                    attachments_data[wp.id] = []
+            
+            logger.info(f"Fetched additional data: {len(relations)} relations, {len(time_entries)} time entries, {len(users)} users")
+            
+        except OpenProjectAPIError as e:
+            logger.error(f"OpenProject API error: {e.message}")
+            
+            # Map OpenProject API errors to appropriate HTTP status codes
+            if e.status_code == 401:
+                raise HTTPException(status_code=401, detail={
+                    "error": {
+                        "message": e.message,
+                        "type": "authentication_error",
+                        "code": "invalid_api_key"
+                    }
+                })
+            elif e.status_code == 403:
+                raise HTTPException(status_code=403, detail={
+                    "error": {
+                        "message": e.message,
+                        "type": "permission_error",
+                        "code": "insufficient_permissions"
+                    }
+                })
+            elif e.status_code == 404:
+                raise HTTPException(status_code=404, detail={
+                    "error": {
+                        "message": e.message,
+                        "type": "not_found_error",
+                        "code": "project_not_found"
+                    }
+                })
+            elif e.status_code == 503:
+                raise HTTPException(status_code=503, detail={
+                    "error": {
+                        "message": e.message,
+                        "type": "service_unavailable_error",
+                        "code": "openproject_unavailable"
+                    }
+                })
+            else:
+                raise HTTPException(status_code=500, detail={
+                    "error": {
+                        "message": f"OpenProject API error: {e.message}",
+                        "type": "external_api_error",
+                        "code": "openproject_api_error"
+                    }
+                })
+        
+        # Perform the 10 automated project management checks
+        try:
+            from src.templates.report_templates import ProjectManagementAnalyzer
+            
+            analyzer = ProjectManagementAnalyzer()
+            checks_results = await analyzer.perform_all_checks(
+                work_packages=work_packages,
+                relations=relations,
+                time_entries=time_entries,
+                users=users,
+                journals_data=journals_data,
+                attachments_data=attachments_data
+            )
+            
+            logger.info(f"Completed {analyzer.checks_performed} automated checks")
+            
+        except Exception as e:
+            logger.error(f"Error performing automated checks: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": f"Failed to perform automated checks: {str(e)}",
+                        "type": "analysis_error",
+                        "code": "checks_failed"
+                    }
+                }
+            )
+        
+        # Get PMFlex context from RAG system
+        try:
+            from src.pipelines.rag_pipeline import rag_pipeline
+            
+            # Build query for PMFlex context
+            query_parts = [
+                f"PMFlex {project_type} project management",
+                "German federal government project standards",
+                "project management best practices",
+                "risk management guidelines"
+            ]
+            
+            # Add specific terms based on check results
+            if checks_results.get("deadline_health", {}).get("severity") == "critical":
+                query_parts.append("deadline management project delays")
+            
+            if checks_results.get("resource_balance", {}).get("severity") == "warning":
+                query_parts.append("resource allocation team management")
+            
+            query = " ".join(query_parts)
+            pmflex_context = rag_pipeline.retriever.retrieve_context(
+                query=query,
+                max_chunks=5,
+                score_threshold=0.1
+            )
+            
+            logger.info("Retrieved PMFlex context from RAG system")
+            
+        except Exception as e:
+            logger.warning(f"Could not retrieve PMFlex context: {e}")
+            pmflex_context = ""
+        
+        # Generate German hints using LLM
+        try:
+            hints_json = generation_pipeline.generate_project_management_hints(
+                project_id=str(project_id),
+                project_type=project_type,
+                openproject_base_url=base_url,
+                checks_results=checks_results,
+                pmflex_context=pmflex_context
+            )
+            
+            # Parse the JSON response with better error handling
+            import json
+            import re
+            
+            try:
+                # Try to extract JSON from the response if it contains extra text
+                hints_json_clean = hints_json.strip()
+                
+                # Look for JSON block in the response
+                json_match = re.search(r'\{.*\}', hints_json_clean, re.DOTALL)
+                if json_match:
+                    hints_json_clean = json_match.group(0)
+                
+                logger.info(f"Attempting to parse JSON: {hints_json_clean[:200]}...")
+                hints_data = json.loads(hints_json_clean)
+                
+                # Validate the structure
+                if not isinstance(hints_data, dict):
+                    raise ValueError("Response is not a JSON object")
+                
+                if "hints" not in hints_data:
+                    raise ValueError("Response missing 'hints' field")
+                
+                if not isinstance(hints_data["hints"], list):
+                    raise ValueError("'hints' field is not a list")
+                
+                # Convert to Pydantic models
+                from src.models.schemas import ProjectManagementHint
+                hints = []
+                
+                for i, hint_data in enumerate(hints_data.get("hints", [])):
+                    try:
+                        if not isinstance(hint_data, dict):
+                            logger.warning(f"Hint {i} is not a dictionary, skipping")
+                            continue
+                        
+                        # Ensure required fields exist
+                        if "title" not in hint_data or "description" not in hint_data:
+                            logger.warning(f"Hint {i} missing required fields, skipping")
+                            continue
+                        
+                        hint = ProjectManagementHint(
+                            checked=hint_data.get("checked", False),
+                            title=str(hint_data["title"])[:60],  # Truncate to max length
+                            description=str(hint_data["description"])
+                        )
+                        hints.append(hint)
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to parse hint {i}: {e}")
+                        continue
+                
+                summary = hints_data.get("summary")
+                if summary:
+                    summary = str(summary)
+                
+                logger.info(f"Successfully parsed {len(hints)} hints from LLM response")
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse hints JSON: {e}")
+                logger.error(f"Raw response: {hints_json}")
+                
+                # Try to provide a fallback response
+                hints = [ProjectManagementHint(
+                    checked=False,
+                    title="JSON-Parsing-Fehler",
+                    description="Die automatische Hinweisgenerierung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
+                )]
+                summary = "Fehler bei der Hinweisgenerierung aufgetreten."
+                
+            except (ValueError, KeyError) as e:
+                logger.error(f"Invalid JSON structure: {e}")
+                logger.error(f"Raw response: {hints_json}")
+                
+                # Provide fallback response
+                hints = [ProjectManagementHint(
+                    checked=False,
+                    title="Strukturfehler",
+                    description="Die Antwort der KI hatte ein unerwartetes Format. Bitte versuchen Sie es erneut."
+                )]
+                summary = "Fehler bei der Antwortverarbeitung."
+            
+            logger.info(f"Successfully generated {len(hints)} project management hints")
+            
+            return ProjectManagementHintsResponse(
+                hints=hints,
+                summary=summary,
+                project_id=project_id,
+                checks_performed=analyzer.checks_performed,
+                openproject_base_url=base_url
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating hints: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": f"Failed to generate hints: {str(e)}",
+                        "type": "hint_generation_error",
+                        "code": "llm_generation_failed"
+                    }
+                }
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in project management hints generation: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail={

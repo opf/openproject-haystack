@@ -135,3 +135,28 @@ class ProjectStatusReportResponse(BaseModel):
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     work_packages_analyzed: int
     openproject_base_url: str
+
+
+# Project Management Hints Models
+
+class ProjectManagementHint(BaseModel):
+    """Model for a single project management hint."""
+    checked: bool = False
+    title: str = Field(..., description="German title of the hint")
+    description: str = Field(..., description="German description of the hint")
+
+
+class ProjectManagementHintsRequest(BaseModel):
+    """Request model for project management hints generation."""
+    project: ProjectInfo = Field(..., description="Project information")
+    openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+
+
+class ProjectManagementHintsResponse(BaseModel):
+    """Response model for project management hints."""
+    hints: List[ProjectManagementHint] = Field(..., description="List of project management hints")
+    summary: Optional[str] = Field(None, description="Optional summary text in German")
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    project_id: int
+    checks_performed: int
+    openproject_base_url: str

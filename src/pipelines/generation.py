@@ -232,6 +232,54 @@ class GenerationPipeline:
         
         return report_text, analysis
     
+    def generate_project_management_hints(
+        self,
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        checks_results: Dict[str, Any],
+        pmflex_context: str = ""
+    ) -> str:
+        """Generate German project management hints from check results.
+        
+        Args:
+            project_id: OpenProject project ID
+            project_type: Type of project
+            openproject_base_url: Base URL of OpenProject instance
+            checks_results: Results from the 10 automated checks
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Generated hints in JSON format
+        """
+        from src.templates.report_templates import ProjectManagementHintsTemplate
+        
+        # Create hints prompt using template
+        template = ProjectManagementHintsTemplate()
+        prompt = template.create_hints_prompt(
+            project_id=project_id,
+            project_type=project_type,
+            openproject_base_url=openproject_base_url,
+            checks_results=checks_results,
+            pmflex_context=pmflex_context
+        )
+        
+        # Generate hints using LLM with specific parameters for JSON output
+        generator = OllamaGenerator(
+            model=settings.OLLAMA_MODEL,
+            url=settings.OLLAMA_URL,
+            generation_kwargs={
+                "num_predict": 2000,  # Sufficient for JSON response
+                "temperature": 0.2,   # Lower temperature for more consistent JSON
+                "format": "json"      # Request JSON format if supported
+            }
+        )
+        
+        result = generator.run(prompt)
+        hints_json = result["replies"][0]
+        
+        return hints_json
+    
     def get_available_models(self) -> List[str]:
         """Get list of available models.
         

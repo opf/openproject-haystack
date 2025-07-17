@@ -107,6 +107,235 @@ class OpenProjectClient:
                 raise
             raise OpenProjectAPIError(f"Unexpected error: {str(e)}", status_code=500)
     
+    async def get_work_package_relations(self, project_id: str) -> List[Dict[str, Any]]:
+        """Fetch work package relations for dependency analysis.
+        
+        Args:
+            project_id: The OpenProject project ID
+            
+        Returns:
+            List of relation dictionaries
+            
+        Raises:
+            OpenProjectAPIError: If API request fails
+        """
+        # First get all work packages to then fetch their relations
+        work_packages = await self.get_work_packages(project_id)
+        relations = []
+        
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                for wp in work_packages:
+                    url = f"{self.base_url}/api/v3/work_packages/{wp.id}/relations"
+                    logger.debug(f"Fetching relations for work package {wp.id}")
+                    
+                    response = await client.get(url, headers=self.headers)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if "_embedded" in data and "elements" in data["_embedded"]:
+                            relations.extend(data["_embedded"]["elements"])
+                    elif response.status_code not in [404, 403]:  # 404/403 might be normal for some work packages
+                        logger.warning(f"Failed to fetch relations for work package {wp.id}: {response.status_code}")
+                
+                logger.info(f"Successfully fetched {len(relations)} relations")
+                return relations
+                
+        except httpx.TimeoutException:
+            raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
+        except httpx.ConnectError:
+            raise OpenProjectAPIError("Could not connect to OpenProject API", status_code=503)
+        except Exception as e:
+            if isinstance(e, OpenProjectAPIError):
+                raise
+            raise OpenProjectAPIError(f"Unexpected error fetching relations: {str(e)}", status_code=500)
+    
+    async def get_time_entries(self, project_id: str) -> List[Dict[str, Any]]:
+        """Fetch time entries for budget and resource analysis.
+        
+        Args:
+            project_id: The OpenProject project ID
+            
+        Returns:
+            List of time entry dictionaries
+            
+        Raises:
+            OpenProjectAPIError: If API request fails
+        """
+        url = f"{self.base_url}/api/v3/projects/{project_id}/time_entries"
+        
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                logger.info(f"Fetching time entries from: {url}")
+                
+                response = await client.get(url, headers=self.headers)
+                
+                if response.status_code == 401:
+                    raise OpenProjectAPIError(
+                        "Invalid API key or insufficient permissions", 
+                        status_code=401
+                    )
+                elif response.status_code == 403:
+                    raise OpenProjectAPIError(
+                        "Insufficient permissions to access time entries", 
+                        status_code=403
+                    )
+                elif response.status_code == 404:
+                    logger.info("No time entries found for this project")
+                    return []
+                elif response.status_code != 200:
+                    raise OpenProjectAPIError(
+                        f"OpenProject API returned status {response.status_code}: {response.text}",
+                        status_code=response.status_code
+                    )
+                
+                data = response.json()
+                time_entries = []
+                
+                if "_embedded" in data and "elements" in data["_embedded"]:
+                    time_entries = data["_embedded"]["elements"]
+                
+                logger.info(f"Successfully fetched {len(time_entries)} time entries")
+                return time_entries
+                
+        except httpx.TimeoutException:
+            raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
+        except httpx.ConnectError:
+            raise OpenProjectAPIError("Could not connect to OpenProject API", status_code=503)
+        except Exception as e:
+            if isinstance(e, OpenProjectAPIError):
+                raise
+            raise OpenProjectAPIError(f"Unexpected error fetching time entries: {str(e)}", status_code=500)
+    
+    async def get_users(self) -> List[Dict[str, Any]]:
+        """Fetch users for resource capacity analysis.
+        
+        Returns:
+            List of user dictionaries
+            
+        Raises:
+            OpenProjectAPIError: If API request fails
+        """
+        url = f"{self.base_url}/api/v3/users"
+        
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                logger.info(f"Fetching users from: {url}")
+                
+                response = await client.get(url, headers=self.headers)
+                
+                if response.status_code == 401:
+                    raise OpenProjectAPIError(
+                        "Invalid API key or insufficient permissions", 
+                        status_code=401
+                    )
+                elif response.status_code == 403:
+                    raise OpenProjectAPIError(
+                        "Insufficient permissions to access users", 
+                        status_code=403
+                    )
+                elif response.status_code != 200:
+                    raise OpenProjectAPIError(
+                        f"OpenProject API returned status {response.status_code}: {response.text}",
+                        status_code=response.status_code
+                    )
+                
+                data = response.json()
+                users = []
+                
+                if "_embedded" in data and "elements" in data["_embedded"]:
+                    users = data["_embedded"]["elements"]
+                
+                logger.info(f"Successfully fetched {len(users)} users")
+                return users
+                
+        except httpx.TimeoutException:
+            raise OpenProjectAPIError("Request to OpenProject API timed out", status_code=408)
+        except httpx.ConnectError:
+            raise OpenProjectAPIError("Could not connect to OpenProject API", status_code=503)
+        except Exception as e:
+            if isinstance(e, OpenProjectAPIError):
+                raise
+            raise OpenProjectAPIError(f"Unexpected error fetching users: {str(e)}", status_code=500)
+    
+    async def get_work_package_journals(self, work_package_id: int) -> List[Dict[str, Any]]:
+        """Fetch journals (activity/comments) for a work package.
+        
+        Args:
+            work_package_id: The work package ID
+            
+        Returns:
+            List of journal dictionaries
+            
+        Raises:
+            OpenProjectAPIError: If API request fails
+        """
+        url = f"{self.base_url}/api/v3/work_packages/{work_package_id}/activities"
+        
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                logger.debug(f"Fetching journals for work package {work_package_id}")
+                
+                response = await client.get(url, headers=self.headers)
+                
+                if response.status_code == 404:
+                    logger.debug(f"No journals found for work package {work_package_id}")
+                    return []
+                elif response.status_code != 200:
+                    logger.warning(f"Failed to fetch journals for work package {work_package_id}: {response.status_code}")
+                    return []
+                
+                data = response.json()
+                journals = []
+                
+                if "_embedded" in data and "elements" in data["_embedded"]:
+                    journals = data["_embedded"]["elements"]
+                
+                return journals
+                
+        except Exception as e:
+            logger.warning(f"Error fetching journals for work package {work_package_id}: {e}")
+            return []
+    
+    async def get_work_package_attachments(self, work_package_id: int) -> List[Dict[str, Any]]:
+        """Fetch attachments for a work package.
+        
+        Args:
+            work_package_id: The work package ID
+            
+        Returns:
+            List of attachment dictionaries
+            
+        Raises:
+            OpenProjectAPIError: If API request fails
+        """
+        url = f"{self.base_url}/api/v3/work_packages/{work_package_id}/attachments"
+        
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                logger.debug(f"Fetching attachments for work package {work_package_id}")
+                
+                response = await client.get(url, headers=self.headers)
+                
+                if response.status_code == 404:
+                    logger.debug(f"No attachments found for work package {work_package_id}")
+                    return []
+                elif response.status_code != 200:
+                    logger.warning(f"Failed to fetch attachments for work package {work_package_id}: {response.status_code}")
+                    return []
+                
+                data = response.json()
+                attachments = []
+                
+                if "_embedded" in data and "elements" in data["_embedded"]:
+                    attachments = data["_embedded"]["elements"]
+                
+                return attachments
+                
+        except Exception as e:
+            logger.warning(f"Error fetching attachments for work package {work_package_id}: {e}")
+            return []
+    
     def _parse_work_package(self, wp_data: Dict[str, Any]) -> WorkPackage:
         """Parse work package data from OpenProject API response.
         
