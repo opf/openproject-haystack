@@ -383,20 +383,25 @@ class GenerationPipeline:
         # Add BlockNote-specific instructions
         blocknote_instructions = f"""
 
-IMPORTANT: You must respond with ONLY valid JSON that matches the exact schema provided. Do not include any explanatory text, markdown formatting, or additional commentary.
+CRITICAL: You must respond with ONLY valid JSON that matches the exact schema. No explanatory text, no markdown, no comments.
 
-The JSON schema you must follow is:
-{json.dumps(json_tool.function.parameters, indent=2)}
+Schema requirements:
+- Root object must have "operations" array
+- Each operation must have "type" field: "update", "add", or "delete"
+- Update operations need: type, id, block (where block is a single HTML string)
+- Add operations need: type, referenceId, position, blocks (where blocks is array of HTML strings)
+- Delete operations need: type, id
 
-Your response must be a valid JSON object that can be parsed directly. The response should contain operations that manipulate the document blocks according to the user's request.
-
-Remember:
-- Each list item should be a separate block
+IMPORTANT RULES:
 - Block IDs must be preserved exactly (including trailing $)
-- Use the cursor position to determine where to insert new content
-- Prefer updating existing blocks over removing and adding when possible
+- Each list item should be a separate block: <ul><li>item</li></ul>
+- The "blocks" field in add operations must be an array of HTML strings, not objects
+- Use simple HTML: <ul><li>Mercury</li></ul>, <ul><li>Venus</li></ul>, etc.
 
-Respond with ONLY the JSON object, no other text:"""
+Example valid response:
+{{"operations":[{{"type":"add","referenceId":"82ec1e48-07ee-4cfa-85e5-da9bf669cbf2$","position":"after","blocks":["<ul><li>Mercury</li></ul>","<ul><li>Venus</li></ul>","<ul><li>Earth</li></ul>"]}}]}}
+
+Respond with ONLY valid JSON:"""
         
         return base_prompt + blocknote_instructions
     
@@ -411,8 +416,12 @@ Respond with ONLY the JSON object, no other text:"""
             Validated JSON string for function arguments
         """
         try:
-            # Clean the response text
+            # Clean the response text more aggressively
             cleaned_response = response_text.strip()
+            
+            # Remove any markdown code blocks
+            cleaned_response = re.sub(r'```json\s*', '', cleaned_response)
+            cleaned_response = re.sub(r'```\s*$', '', cleaned_response)
             
             # Try to extract JSON if there's extra text
             json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
@@ -422,38 +431,11 @@ Respond with ONLY the JSON object, no other text:"""
             # Parse and validate JSON
             parsed_json = json.loads(cleaned_response)
             
-            # Basic validation - ensure it has the operations field
-            if not isinstance(parsed_json, dict):
-                raise ValueError("Response is not a JSON object")
+            # Fix common AI mistakes and validate structure
+            parsed_json = self._fix_blocknote_json(parsed_json)
             
-            if "operations" not in parsed_json:
-                raise ValueError("Response missing 'operations' field")
-            
-            if not isinstance(parsed_json["operations"], list):
-                raise ValueError("'operations' field is not a list")
-            
-            # Validate each operation has required fields
-            for i, operation in enumerate(parsed_json["operations"]):
-                if not isinstance(operation, dict):
-                    raise ValueError(f"Operation {i} is not an object")
-                
-                if "type" not in operation:
-                    raise ValueError(f"Operation {i} missing 'type' field")
-                
-                op_type = operation["type"]
-                if op_type not in ["update", "add", "delete"]:
-                    raise ValueError(f"Operation {i} has invalid type: {op_type}")
-                
-                # Validate required fields based on operation type
-                if op_type == "update":
-                    if "id" not in operation or "block" not in operation:
-                        raise ValueError(f"Update operation {i} missing required fields")
-                elif op_type == "add":
-                    if not all(field in operation for field in ["referenceId", "position", "blocks"]):
-                        raise ValueError(f"Add operation {i} missing required fields")
-                elif op_type == "delete":
-                    if "id" not in operation:
-                        raise ValueError(f"Delete operation {i} missing 'id' field")
+            # Validate the final structure
+            self._validate_blocknote_structure(parsed_json)
             
             logger.info(f"Successfully validated BlockNote response with {len(parsed_json['operations'])} operations")
             return json.dumps(parsed_json, separators=(',', ':'))
@@ -461,6 +443,15 @@ Respond with ONLY the JSON object, no other text:"""
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse BlockNote JSON response: {e}")
             logger.error(f"Raw response: {response_text}")
+            
+            # Try to fix common JSON issues
+            try:
+                fixed_json = self._attempt_json_repair(response_text)
+                if fixed_json:
+                    logger.info("Successfully repaired malformed JSON")
+                    return fixed_json
+            except Exception as repair_error:
+                logger.error(f"JSON repair also failed: {repair_error}")
             
             # Return a fallback error operation
             fallback_response = {
@@ -485,6 +476,210 @@ Respond with ONLY the JSON object, no other text:"""
                 }]
             }
             return json.dumps(fallback_response, separators=(',', ':'))
+    
+    def _fix_blocknote_json(self, parsed_json: dict) -> dict:
+        """Fix common AI mistakes in BlockNote JSON.
+        
+        Args:
+            parsed_json: Parsed JSON object
+            
+        Returns:
+            Fixed JSON object
+        """
+        if not isinstance(parsed_json, dict):
+            raise ValueError("Response is not a JSON object")
+        
+        # Ensure operations field exists
+        if "operations" not in parsed_json:
+            raise ValueError("Response missing 'operations' field")
+        
+        if not isinstance(parsed_json["operations"], list):
+            raise ValueError("'operations' field is not a list")
+        
+        # Fix each operation
+        fixed_operations = []
+        for i, operation in enumerate(parsed_json["operations"]):
+            if not isinstance(operation, dict):
+                logger.warning(f"Skipping non-object operation {i}")
+                continue
+            
+            fixed_op = self._fix_single_operation(operation, i)
+            if fixed_op:
+                fixed_operations.append(fixed_op)
+        
+        if not fixed_operations:
+            raise ValueError("No valid operations found after fixing")
+        
+        return {"operations": fixed_operations}
+    
+    def _fix_single_operation(self, operation: dict, index: int) -> dict:
+        """Fix a single operation.
+        
+        Args:
+            operation: Operation to fix
+            index: Operation index for error messages
+            
+        Returns:
+            Fixed operation or None if unfixable
+        """
+        if "type" not in operation:
+            logger.warning(f"Operation {index} missing 'type' field, skipping")
+            return None
+        
+        op_type = operation["type"]
+        if op_type not in ["update", "add", "delete"]:
+            logger.warning(f"Operation {index} has invalid type: {op_type}, skipping")
+            return None
+        
+        # Fix update operations
+        if op_type == "update":
+            if "id" not in operation or "block" not in operation:
+                logger.warning(f"Update operation {index} missing required fields, skipping")
+                return None
+            return {
+                "type": "update",
+                "id": str(operation["id"]),
+                "block": str(operation["block"])
+            }
+        
+        # Fix add operations
+        elif op_type == "add":
+            if not all(field in operation for field in ["referenceId", "position", "blocks"]):
+                logger.warning(f"Add operation {index} missing required fields, skipping")
+                return None
+            
+            # Fix blocks field - ensure it's an array of strings
+            blocks = operation["blocks"]
+            if not isinstance(blocks, list):
+                logger.warning(f"Add operation {index} blocks field is not a list, skipping")
+                return None
+            
+            fixed_blocks = []
+            for j, block in enumerate(blocks):
+                if isinstance(block, dict):
+                    # AI sometimes creates objects instead of strings
+                    if "block" in block:
+                        fixed_blocks.append(str(block["block"]))
+                    elif "content" in block:
+                        fixed_blocks.append(str(block["content"]))
+                    else:
+                        logger.warning(f"Skipping malformed block object in operation {index}, block {j}")
+                elif isinstance(block, str):
+                    fixed_blocks.append(block)
+                else:
+                    logger.warning(f"Skipping non-string block in operation {index}, block {j}")
+            
+            if not fixed_blocks:
+                logger.warning(f"Add operation {index} has no valid blocks, skipping")
+                return None
+            
+            return {
+                "type": "add",
+                "referenceId": str(operation["referenceId"]),
+                "position": str(operation["position"]),
+                "blocks": fixed_blocks
+            }
+        
+        # Fix delete operations
+        elif op_type == "delete":
+            if "id" not in operation:
+                logger.warning(f"Delete operation {index} missing 'id' field, skipping")
+                return None
+            return {
+                "type": "delete",
+                "id": str(operation["id"])
+            }
+        
+        return None
+    
+    def _validate_blocknote_structure(self, parsed_json: dict) -> None:
+        """Validate the final BlockNote structure.
+        
+        Args:
+            parsed_json: JSON to validate
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        if not isinstance(parsed_json, dict):
+            raise ValueError("Response is not a JSON object")
+        
+        if "operations" not in parsed_json:
+            raise ValueError("Response missing 'operations' field")
+        
+        if not isinstance(parsed_json["operations"], list):
+            raise ValueError("'operations' field is not a list")
+        
+        if len(parsed_json["operations"]) == 0:
+            raise ValueError("Operations array is empty")
+        
+        # Validate each operation
+        for i, operation in enumerate(parsed_json["operations"]):
+            if not isinstance(operation, dict):
+                raise ValueError(f"Operation {i} is not an object")
+            
+            if "type" not in operation:
+                raise ValueError(f"Operation {i} missing 'type' field")
+            
+            op_type = operation["type"]
+            if op_type not in ["update", "add", "delete"]:
+                raise ValueError(f"Operation {i} has invalid type: {op_type}")
+            
+            # Validate required fields based on operation type
+            if op_type == "update":
+                if "id" not in operation or "block" not in operation:
+                    raise ValueError(f"Update operation {i} missing required fields")
+                if not isinstance(operation["block"], str):
+                    raise ValueError(f"Update operation {i} block must be a string")
+            elif op_type == "add":
+                if not all(field in operation for field in ["referenceId", "position", "blocks"]):
+                    raise ValueError(f"Add operation {i} missing required fields")
+                if not isinstance(operation["blocks"], list):
+                    raise ValueError(f"Add operation {i} blocks must be a list")
+                if len(operation["blocks"]) == 0:
+                    raise ValueError(f"Add operation {i} blocks array is empty")
+                for j, block in enumerate(operation["blocks"]):
+                    if not isinstance(block, str):
+                        raise ValueError(f"Add operation {i} block {j} must be a string")
+            elif op_type == "delete":
+                if "id" not in operation:
+                    raise ValueError(f"Delete operation {i} missing 'id' field")
+    
+    def _attempt_json_repair(self, response_text: str) -> str:
+        """Attempt to repair malformed JSON.
+        
+        Args:
+            response_text: Raw response text
+            
+        Returns:
+            Repaired JSON string or None if repair failed
+        """
+        try:
+            # Common fixes for AI-generated JSON
+            cleaned = response_text.strip()
+            
+            # Remove markdown
+            cleaned = re.sub(r'```json\s*', '', cleaned)
+            cleaned = re.sub(r'```\s*$', '', cleaned)
+            
+            # Fix common issues
+            cleaned = re.sub(r',\s*}', '}', cleaned)  # Remove trailing commas
+            cleaned = re.sub(r',\s*]', ']', cleaned)  # Remove trailing commas in arrays
+            
+            # Try to extract just the JSON part
+            json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if json_match:
+                cleaned = json_match.group(0)
+            
+            # Try parsing again
+            parsed = json.loads(cleaned)
+            fixed = self._fix_blocknote_json(parsed)
+            self._validate_blocknote_structure(fixed)
+            
+            return json.dumps(fixed, separators=(',', ':'))
+            
+        except Exception:
+            return None
     
     def get_available_models(self) -> List[str]:
         """Get list of available models.

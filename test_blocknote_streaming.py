@@ -67,7 +67,7 @@ def test_blocknote_streaming():
         "stream": True
     }
     
-    url = "http://localhost:8000/v1/chat/completions"
+    url = "https://haystack.pmflex.one/haystack/v1/chat/completions"
     
     print("Testing BlockNote AI streaming integration...")
     print(f"Sending streaming request to: {url}")
@@ -182,7 +182,7 @@ def test_regular_streaming():
         "stream": True
     }
     
-    url = "http://localhost:8000/v1/chat/completions"
+    url = "https://haystack.pmflex.one/haystack/v1/chat/completions"
     
     print("\n" + "="*50)
     print("Testing regular streaming...")
