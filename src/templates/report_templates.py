@@ -605,55 +605,57 @@ class ProjectStatusReportTemplate:
             Template string for LLM prompt
         """
         return """
-You are a project management expert tasked with generating a comprehensive project status report based on work package data from OpenProject.
+Sie sind ein Experte für Projektmanagement und erstellen einen umfassenden Projektstatusbericht basierend auf Arbeitspaket-Daten aus OpenProject.
 
-Based on the following project data and analysis, generate a professional project status report:
+Basierend auf den folgenden Projektdaten und Analysen, erstellen Sie einen professionellen Projektstatusbericht:
 
-PROJECT INFORMATION:
-- Project ID: {project_id}
+PROJEKTINFORMATIONEN:
+- Projekt-ID: {project_id}
 - OpenProject URL: {openproject_base_url}
-- Report Generated: {generated_at}
-- Total Work Packages Analyzed: {total_work_packages}
+- Bericht erstellt: {generated_at}
+- Analysierte Arbeitspakete gesamt: {total_work_packages}
 
-WORK PACKAGE ANALYSIS:
+ARBEITSPAKET-ANALYSE:
 {analysis_data}
 
-WORK PACKAGE DETAILS:
+ARBEITSPAKET-DETAILS:
 {work_packages_summary}
 
-Please generate a comprehensive project status report that includes:
+Bitte erstellen Sie einen umfassenden Projektstatusbericht, der folgende Punkte enthält:
 
-1. **Executive Summary**
-   - Overall project health assessment
-   - Key achievements and progress highlights
-   - Critical issues or risks identified
+1. **Zusammenfassung**
+   - Gesamtbewertung der Projektgesundheit
+   - Wichtige Erfolge und Fortschrittshighlights
+   - Kritische Probleme oder identifizierte Risiken
 
-2. **Work Package Statistics**
-   - Total work packages and their distribution by status
-   - Completion rate and progress metrics
-   - Priority breakdown and focus areas
+2. **Arbeitspaket-Statistiken**
+   - Gesamtzahl der Arbeitspakete und deren Verteilung nach Status
+   - Fertigstellungsgrad und Fortschrittsmetriken
+   - Prioritätsaufschlüsselung und Schwerpunktbereiche
 
-3. **Team Performance**
-   - Workload distribution among team members
-   - Individual and team productivity insights
-   - Resource allocation observations
+3. **Teamleistung**
+   - Arbeitsbelastungsverteilung unter den Teammitgliedern
+   - Individuelle und Team-Produktivitätseinblicke
+   - Beobachtungen zur Ressourcenzuteilung
 
-4. **Timeline and Deadlines**
-   - Overdue items and their impact
-   - Upcoming deadlines and priorities
-   - Schedule adherence assessment
+4. **Zeitplan und Fristen**
+   - Überfällige Punkte und deren Auswirkungen
+   - Anstehende Fristen und Prioritäten
+   - Bewertung der Termintreue
 
-5. **Recommendations**
-   - Actionable steps to improve project health
-   - Risk mitigation strategies
-   - Resource reallocation suggestions if needed
+5. **Empfehlungen**
+   - Umsetzbare Schritte zur Verbesserung der Projektgesundheit
+   - Risikominderungsstrategien
+   - Vorschläge zur Ressourcenumverteilung falls erforderlich
 
-6. **Next Steps**
-   - Immediate actions required
-   - Medium-term planning considerations
-   - Success metrics to monitor
+6. **Nächste Schritte**
+   - Sofort erforderliche Maßnahmen
+   - Mittelfristige Planungsüberlegungen
+   - Zu überwachende Erfolgsmetriken
 
-Format the report in a professional, clear, and actionable manner. Use bullet points and structured sections for easy readability. Focus on insights that would be valuable for project managers and stakeholders.
+Formatieren Sie den Bericht professionell, klar und umsetzbar. Verwenden Sie Aufzählungspunkte und strukturierte Abschnitte für eine einfache Lesbarkeit. Konzentrieren Sie sich auf Erkenntnisse, die für Projektmanager und Stakeholder wertvoll wären.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
 """
     
     @staticmethod
@@ -788,81 +790,81 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             Template string for LLM prompt with RAG enhancement
         """
         return """
-You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report (Projektstatusbericht) based on work package data from OpenProject, following the official German PMFlex template structure.
+Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik der deutschen Bundesverwaltung. Ihre Aufgabe ist es, einen umfassenden Projektstatusbericht (Projektstatusbericht) basierend auf Arbeitspaket-Daten aus OpenProject zu erstellen und dabei die offizielle deutsche PMFlex-Vorlage zu befolgen.
 
-PROJECT INFORMATION:
-- Project ID: {project_id}
-- Project Type: {project_type}
+PROJEKTINFORMATIONEN:
+- Projekt-ID: {project_id}
+- Projekttyp: {project_type}
 - OpenProject URL: {openproject_base_url}
-- Report Generated: {generated_at}
-- Total Work Packages Analyzed: {total_work_packages}
+- Bericht erstellt: {generated_at}
+- Analysierte Arbeitspakete gesamt: {total_work_packages}
 
-WORK PACKAGE ANALYSIS:
+ARBEITSPAKET-ANALYSE:
 {analysis_data}
 
-WORK PACKAGE DETAILS:
+ARBEITSPAKET-DETAILS:
 {work_packages_summary}
 
-PMFLEX CONTEXT AND TEMPLATES:
+PMFLEX-KONTEXT UND VORLAGEN:
 {pmflex_context}
 
-Based on the project data, analysis, and PMFlex methodology context above, generate a project status report (Projektstatusbericht) that follows the official German PMFlex template structure:
-
-## REPORT STRUCTURE (Generate in this exact order):
+Basierend auf den Projektdaten, der Analyse und dem PMFlex-Methodikkontext oben, erstellen Sie einen Projektstatusbericht (Projektstatusbericht), der der offiziellen deutschen PMFlex-Vorlage folg und genau in dieser Reihenfolget erstellt wird:
 
 ### 1. **ZUSAMMENFASSUNG (Summary)**
-Start with a comprehensive summary paragraph that provides:
-- Brief description of the current project status (Kurze Beschreibung des aktuellen Status des Projekts)
-- Overall project health assessment according to PMFlex criteria
-- Key achievements and progress highlights from the reporting period
-- Critical issues or risks that require attention
-- Overall trajectory and outlook for the project
+Beginnen Sie mit einem umfassenden Zusammenfassungsabsatz, der Folgendes enthält:
+- Kurze Beschreibung des aktuellen Projektstatus
+- Gesamtbewertung der Projektgesundheit nach PMFlex-Kriterien
+- Wichtige Erfolge und Fortschrittshighlights aus der Berichtsperiode
+- Kritische Probleme oder Risiken, die Aufmerksamkeit erfordern
+- Gesamtentwicklung und Ausblick für das Projekt
 
 ### 2. **STATUSÜBERSICHT (Status Overview)**
-Provide a status assessment using the PMFlex traffic light system:
-- **Gesamtstatus (Overall Status)**: Assess as "Im Plan" (Green), "Teilweise kritisch" (Yellow), or "Kritisch" (Red)
-- **Zeit (Time/Schedule)**: Schedule adherence assessment
-- **Kosten (Costs)**: Budget and cost status (if available from work package data)
-- **Risiko (Risk)**: Risk level assessment based on work package analysis
+Geben Sie eine Statusbewertung mit dem PMFlex-Ampelsystem an:
+- **Gesamtstatus**: Bewerten Sie als "Im Plan" (Grün), "Teilweise kritisch" (Gelb) oder "Kritisch" (Rot)
+- **Zeit (Zeitplan)**: Bewertung der Termintreue
+- **Kosten**: Budget- und Kostenstatus (falls aus Arbeitspaket-Daten verfügbar)
+- **Risiko**: Risikobewertung basierend auf der Arbeitspaket-Analyse
 
-Include the reporting period (Berichtsperiode) based on the work package data timeframe.
+Geben Sie die Berichtsperiode basierend auf dem Zeitrahmen der Arbeitspaket-Daten an.
 
 ### 3. **ABGESCHLOSSENE AKTIVITÄTEN UND MEILENSTEINE (Completed Activities and Milestones)**
-List completed work packages and achievements:
-- Work packages completed during the reporting period (with completion percentage = 100%)
-- Key milestones reached
-- Significant deliverables completed
-- Quality gates passed
-- Use bullet points with specific work package IDs and titles where available
+Listen Sie abgeschlossene Arbeitspakete und Erfolge auf:
+- Arbeitspakete, die während der Berichtsperiode abgeschlossen wurden (mit Fertigstellungsgrad = 100%)
+- Erreichte wichtige Meilensteine
+- Abgeschlossene bedeutende Liefergegenstände
+- Durchlaufene Qualitätstore
+- Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Titeln, wo verfügbar
 
 ### 4. **NÄCHSTE AKTIVITÄTEN UND MEILENSTEINE (Next Activities and Milestones)**
-Outline upcoming work and priorities:
-- Work packages scheduled for the next period
-- Upcoming milestones and deadlines
-- Critical path activities
-- Dependencies that need attention
-- Resource requirements for upcoming activities
-- Use bullet points with specific work package IDs and due dates where available
+Skizzieren Sie anstehende Arbeiten und Prioritäten:
+- Arbeitspakete, die für die nächste Periode geplant sind
+- Anstehende Meilensteine und Fristen
+- Aktivitäten auf dem kritischen Pfad
+- Abhängigkeiten, die Aufmerksamkeit benötigen
+- Ressourcenanforderungen für anstehende Aktivitäten
+- Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Fälligkeitsterminen, wo verfügbar
 
 ### 5. **ENTSCHEIDUNGSBEDARF (Decision Requirements)**
-Identify issues requiring decisions or escalation:
-- Blocked work packages requiring management intervention
-- Resource conflicts or capacity issues
-- Scope changes or requirement clarifications needed
-- Risk mitigation decisions required
-- Budget or timeline adjustments needed
-- Stakeholder decisions pending
-- Use bullet points with clear action items and responsible parties
+Identifizieren Sie Probleme, die Entscheidungen oder Eskalation erfordern:
+- Blockierte Arbeitspakete, die Management-Intervention benötigen
+- Ressourcenkonflikte oder Kapazitätsprobleme
+- Umfangsänderungen oder Anforderungsklärungen erforderlich
+- Risikominderungsentscheidungen erforderlich
+- Budget- oder Zeitplananpassungen erforderlich
+- Ausstehende Stakeholder-Entscheidungen
+- Verwenden Sie Aufzählungspunkte mit klaren Handlungspunkten und verantwortlichen Parteien
 
-## FORMATTING REQUIREMENTS:
-- Use German PMFlex terminology throughout
-- Structure with clear headings and bullet points
-- Include specific work package references where relevant
-- Maintain professional tone suitable for German federal government standards
-- Focus on actionable insights and clear status communication
-- Ensure compliance with PMFlex documentation standards
+## FORMATIERUNGSANFORDERUNGEN:
+- Verwenden Sie durchgehend deutsche PMFlex-Terminologie
+- Strukturieren Sie mit klaren Überschriften und Aufzählungspunkten
+- Beziehen Sie spezifische Arbeitspaket-Referenzen ein, wo relevant
+- Behalten Sie einen professionellen Ton bei, der für deutsche Bundesverwaltungsstandards geeignet ist
+- Konzentrieren Sie sich auf umsetzbare Erkenntnisse und klare Statuskommunikation
+- Stellen Sie die Einhaltung der PMFlex-Dokumentationsstandards sicher
 
-The report should reflect PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration. Prioritize clarity and actionable information for project stakeholders and governance bodies.
+Der Bericht sollte PMFlex-Prinzipien der Transparenz, Verantwortlichkeit und des systematischen Projektmanagement-Ansatzes widerspiegeln, der in der deutschen Bundesverwaltung verwendet wird. Priorisieren Sie Klarheit und umsetzbare Informationen für Projekt-Stakeholder und Governance-Gremien.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche PMFlex-Terminologie und -Standards. Der gesamte Bericht muss in deutscher Sprache verfasst werden.**
 """
     
     @staticmethod
@@ -896,43 +898,47 @@ The report should reflect PMFlex principles of transparency, accountability, and
     def _get_executive_template() -> str:
         """Executive-focused template with high-level insights."""
         return """
-Generate an executive-level project status report focusing on high-level insights and strategic decisions.
+Erstellen Sie einen Projektstatusbericht auf Führungsebene mit Fokus auf strategische Erkenntnisse und Entscheidungen.
 
-PROJECT DATA:
-- Project ID: {project_id}
-- Total Work Packages: {total_work_packages}
-- Analysis: {analysis_data}
+PROJEKTDATEN:
+- Projekt-ID: {project_id}
+- Arbeitspakete gesamt: {total_work_packages}
+- Analyse: {analysis_data}
 
-Focus on:
-1. Strategic project health assessment
-2. Key performance indicators
-3. Resource allocation efficiency
-4. Risk assessment and mitigation
-5. Strategic recommendations
+Schwerpunkt auf:
+1. Strategische Projektgesundheitsbewertung
+2. Wichtige Leistungsindikatoren
+3. Effizienz der Ressourcenzuteilung
+4. Risikobewertung und -minderung
+5. Strategische Empfehlungen
 
-Keep the report concise and focused on decision-making insights.
+Halten Sie den Bericht prägnant und fokussiert auf entscheidungsrelevante Erkenntnisse.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
 """
     
     @staticmethod
     def _get_detailed_template() -> str:
         """Detailed template for comprehensive analysis."""
         return """
-Generate a detailed project status report with comprehensive analysis of all aspects.
+Erstellen Sie einen detaillierten Projektstatusbericht mit umfassender Analyse aller Aspekte.
 
-PROJECT DATA:
-- Project ID: {project_id}
-- Analysis: {analysis_data}
-- Work Packages: {work_packages_summary}
+PROJEKTDATEN:
+- Projekt-ID: {project_id}
+- Analyse: {analysis_data}
+- Arbeitspakete: {work_packages_summary}
 
-Include detailed sections on:
-1. Comprehensive work package analysis
-2. Individual team member performance
-3. Detailed timeline analysis
-4. Quality metrics and trends
-5. Detailed risk assessment
-6. Comprehensive recommendations with implementation steps
+Fügen Sie detaillierte Abschnitte ein zu:
+1. Umfassende Arbeitspaket-Analyse
+2. Individuelle Teammitglieder-Leistung
+3. Detaillierte Zeitplan-Analyse
+4. Qualitätsmetriken und Trends
+5. Detaillierte Risikobewertung
+6. Umfassende Empfehlungen mit Umsetzungsschritten
 
-Provide in-depth insights suitable for project managers and team leads.
+Bieten Sie tiefgreifende Erkenntnisse, die für Projektmanager und Teamleiter geeignet sind.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
 """
 
 
