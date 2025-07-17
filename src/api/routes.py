@@ -256,6 +256,7 @@ async def generate_project_status_report(
     try:
         # Extract values from the new request structure
         project_id = request.project.id
+        project_type = request.project.type
         base_url = request.openproject.base_url
         user_token = request.openproject.user_token
 
@@ -333,6 +334,7 @@ async def generate_project_status_report(
         try:
             report_text, analysis = generation_pipeline.generate_project_status_report(
                 project_id=str(project_id),
+                project_type=project_type,
                 openproject_base_url=base_url,
                 work_packages=work_packages
             )
@@ -341,7 +343,7 @@ async def generate_project_status_report(
 
             return ProjectStatusReportResponse(
                 project_id=project_id,
-                project_type="",
+                project_type=project_type,
                 report=report_text,
                 work_packages_analyzed=len(work_packages),
                 openproject_base_url=base_url
