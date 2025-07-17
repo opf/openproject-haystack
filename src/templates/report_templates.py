@@ -810,7 +810,7 @@ PMFLEX-KONTEXT UND VORLAGEN:
 
 Basierend auf den Projektdaten, der Analyse und dem PMFlex-Methodikkontext oben, erstellen Sie einen Projektstatusbericht (Projektstatusbericht), der der offiziellen deutschen PMFlex-Vorlage folg und genau in dieser Reihenfolget erstellt wird:
 
-### 1. **ZUSAMMENFASSUNG (Summary)**
+### 1. **Zusammenfassung**
 Beginnen Sie mit einem umfassenden Zusammenfassungsabsatz, der Folgendes enthält:
 - Kurze Beschreibung des aktuellen Projektstatus
 - Gesamtbewertung der Projektgesundheit nach PMFlex-Kriterien
@@ -818,7 +818,7 @@ Beginnen Sie mit einem umfassenden Zusammenfassungsabsatz, der Folgendes enthäl
 - Kritische Probleme oder Risiken, die Aufmerksamkeit erfordern
 - Gesamtentwicklung und Ausblick für das Projekt
 
-### 2. **STATUSÜBERSICHT (Status Overview)**
+### 2. **Statusübersicht**
 Geben Sie eine Statusbewertung mit dem PMFlex-Ampelsystem an:
 - **Gesamtstatus**: Bewerten Sie als "Im Plan" (Grün), "Teilweise kritisch" (Gelb) oder "Kritisch" (Rot)
 - **Zeit (Zeitplan)**: Bewertung der Termintreue
@@ -827,7 +827,7 @@ Geben Sie eine Statusbewertung mit dem PMFlex-Ampelsystem an:
 
 Geben Sie die Berichtsperiode basierend auf dem Zeitrahmen der Arbeitspaket-Daten an.
 
-### 3. **ABGESCHLOSSENE AKTIVITÄTEN UND MEILENSTEINE (Completed Activities and Milestones)**
+### 3. **Abgeschlossene Aktivitäten und Meilensteine**
 Listen Sie abgeschlossene Arbeitspakete und Erfolge auf:
 - Arbeitspakete, die während der Berichtsperiode abgeschlossen wurden (mit Fertigstellungsgrad = 100%)
 - Erreichte wichtige Meilensteine
@@ -835,7 +835,7 @@ Listen Sie abgeschlossene Arbeitspakete und Erfolge auf:
 - Durchlaufene Qualitätstore
 - Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Titeln, wo verfügbar
 
-### 4. **NÄCHSTE AKTIVITÄTEN UND MEILENSTEINE (Next Activities and Milestones)**
+### 4. **Nächste Aktivitäten und Meilensteine**
 Skizzieren Sie anstehende Arbeiten und Prioritäten:
 - Arbeitspakete, die für die nächste Periode geplant sind
 - Anstehende Meilensteine und Fristen
@@ -844,7 +844,7 @@ Skizzieren Sie anstehende Arbeiten und Prioritäten:
 - Ressourcenanforderungen für anstehende Aktivitäten
 - Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Fälligkeitsterminen, wo verfügbar
 
-### 5. **ENTSCHEIDUNGSBEDARF (Decision Requirements)**
+### 5. **Entscheidungsbedarf**
 Identifizieren Sie Probleme, die Entscheidungen oder Eskalation erfordern:
 - Blockierte Arbeitspakete, die Management-Intervention benötigen
 - Ressourcenkonflikte oder Kapazitätsprobleme
@@ -854,7 +854,7 @@ Identifizieren Sie Probleme, die Entscheidungen oder Eskalation erfordern:
 - Ausstehende Stakeholder-Entscheidungen
 - Verwenden Sie Aufzählungspunkte mit klaren Handlungspunkten und verantwortlichen Parteien
 
-## FORMATIERUNGSANFORDERUNGEN:
+## Formatierungsanforderungen:
 - Verwenden Sie durchgehend deutsche PMFlex-Terminologie
 - Strukturieren Sie mit klaren Überschriften und Aufzählungspunkten
 - Beziehen Sie spezifische Arbeitspaket-Referenzen ein, wo relevant
