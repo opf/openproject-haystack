@@ -339,7 +339,7 @@ class GenerationPipeline:
             model=request.model,
             url=settings.OLLAMA_URL,
             generation_kwargs={
-                "num_predict": request.max_tokens or 2000,  # Increased for more comprehensive content
+                "num_predict": request.max_tokens or 3500,  # Significantly increased to ensure JSON completion
                 "temperature": request.temperature or 0.2,  # Slightly higher for more creative content
                 "top_p": request.top_p or 0.9,
                 "stop": request.stop or [],
@@ -383,7 +383,12 @@ class GenerationPipeline:
         # Add BlockNote-specific instructions
         blocknote_instructions = f"""
 
-CRITICAL: You must respond with ONLY valid JSON that matches the exact schema. No explanatory text, no markdown, no comments.
+CRITICAL JSON COMPLETION REQUIREMENTS:
+- You MUST respond with ONLY complete, valid JSON that matches the exact schema
+- NO explanatory text, NO markdown, NO comments, NO incomplete responses
+- The JSON MUST be complete with all opening and closing braces, brackets, and quotes
+- NEVER stop generating until the JSON is completely finished
+- End your response with the final closing brace }}
 
 CONTENT GENERATION REQUIREMENTS:
 - Generate COMPREHENSIVE, DETAILED content - not just titles or brief summaries
@@ -398,24 +403,27 @@ DOCUMENT MANIPULATION STRATEGY:
 - Break content into logical paragraphs using separate blocks
 - Create proper document flow with headings, paragraphs, and lists as appropriate
 
-Schema requirements:
-- Root object must have "operations" array
-- Each operation must have "type" field: "update", "add", or "delete"
-- Update operations need: type, id, block (where block is a single HTML string)
-- Add operations need: type, referenceId, position, blocks (where blocks is array of HTML strings)
-- Delete operations need: type, id
+JSON SCHEMA REQUIREMENTS:
+- Root object MUST have "operations" array
+- Each operation MUST have "type" field: "update", "add", or "delete"
+- Update operations MUST have: type, id, block (where block is a single HTML string)
+- Add operations MUST have: type, referenceId, position, blocks (where blocks is array of HTML strings)
+- Delete operations MUST have: type, id
+- ALL strings must be properly escaped and quoted
+- ALL objects and arrays must be properly closed
 
-IMPORTANT RULES:
+CRITICAL RULES:
 - Block IDs must be preserved exactly (including trailing $)
 - Each list item should be a separate block: <ul><li>item</li></ul>
 - The "blocks" field in add operations must be an array of HTML strings, not objects
 - Use rich HTML: <h1>, <h2>, <p>, <ul><li>, <strong>, <em> as appropriate
 - Generate multiple blocks for comprehensive content
+- ALWAYS complete the entire JSON structure - incomplete JSON will cause errors
 
-Example for substantial content:
+Example of COMPLETE JSON for substantial content:
 {{"operations":[{{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"}},{{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives. This system of governance has evolved over centuries and represents one of humanity's most significant political achievements.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights. These principles ensure that all citizens have an equal voice in the political process while protecting the rights of those who may be in the minority.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>","<ul><li>Rule of law and independent judiciary</li></ul>","<ul><li>Freedom of speech, press, and assembly</li></ul>"]}}]}}
 
-Respond with ONLY valid JSON:"""
+RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
         
         return base_prompt + blocknote_instructions
     
