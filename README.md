@@ -76,7 +76,8 @@ This ensures that your application always has the required models available and 
 ```json
 {
   "project": {
-    "id": "YOUR_PORTFOLIO_PROJECT_ID"
+    "id": "YOUR_PORTFOLIO_PROJECT_ID",
+    "type": "portfolio" # should be portfolio
   },
   "openproject": {
     "base_url": "https://your-openproject-instance.com",
