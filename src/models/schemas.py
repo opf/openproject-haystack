@@ -1,33 +1,44 @@
 """Pydantic models for API request/response schemas."""
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Union
 from datetime import datetime
 import time
 
+# --- Suggestion Schemas ---
+class CandidateSuggestion(BaseModel):
+    name: Optional[str] = None
+    score: Optional[float] = None
+    project_id: Optional[Union[int, str]] = None
+    reason: str
 
+class SuggestRequest(BaseModel):
+    project_id: Union[int, str]
+
+class SuggestResponse(BaseModel):
+    portfolio: Optional[str] = None
+    candidates: List[CandidateSuggestion]
+    text: str
+
+# --- Generation Schemas ---
 class GenerationRequest(BaseModel):
     """Request model for text generation."""
     prompt: str
-
 
 class GenerationResponse(BaseModel):
     """Response model for text generation."""
     response: str
 
-
+# --- Health Check ---
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
 
-
-# OpenAI Chat Completion Compatible Models
-
+# --- OpenAI Chat Completion Compatible Models ---
 class ChatMessage(BaseModel):
     """A chat message with role and content."""
-    role: Literal["system", "user", "assistant"]
+    role: str  # Accept any string for compatibility
     content: str
-
 
 class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible chat completion request."""
@@ -41,44 +52,32 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[List[str]] = None
     stream: Optional[bool] = False
 
-
 class Usage(BaseModel):
     """Token usage information."""
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
 
-
 class ChatChoice(BaseModel):
     """A chat completion choice."""
     index: int
     message: ChatMessage
-    finish_reason: Literal["stop", "length", "content_filter"] = "stop"
-
+    finish_reason: Optional[str] = None
 
 class ChatCompletionResponse(BaseModel):
     """OpenAI-compatible chat completion response."""
     id: str
-    object: str = "chat.completion"
-    created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: List[ChatChoice]
     usage: Usage
 
-
 class ModelInfo(BaseModel):
     """Model information."""
     id: str
-    object: str = "model"
-    created: int = Field(default_factory=lambda: int(time.time()))
-    owned_by: str = "local"
-
 
 class ModelsResponse(BaseModel):
     """Response for models endpoint."""
-    object: str = "list"
     data: List[ModelInfo]
-
 
 class ErrorDetail(BaseModel):
     """Error detail information."""
@@ -87,51 +86,43 @@ class ErrorDetail(BaseModel):
     param: Optional[str] = None
     code: Optional[str] = None
 
-
 class ErrorResponse(BaseModel):
     """OpenAI-compatible error response."""
     error: ErrorDetail
 
-
-# Project Status Report Models
-
+# --- Project Status Report Models ---
 class ProjectInfo(BaseModel):
     """Project information model."""
-    id: int = Field(..., description="OpenProject project ID")
+    id: Union[int, str] = Field(..., description="OpenProject project ID")
     type: str = Field(..., description="Project type (e.g., 'portfolio')")
-
 
 class OpenProjectInfo(BaseModel):
     """OpenProject instance information model."""
     base_url: str = Field(..., description="Base URL of OpenProject instance")
     user_token: str = Field(..., description="OpenProject user API token")
 
-
 class ProjectStatusReportRequest(BaseModel):
     """Request model for project status report generation."""
     project: ProjectInfo = Field(..., description="Project information")
     openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
 
-
 class WorkPackage(BaseModel):
     """Model for OpenProject work package data."""
-    id: int
+    id: Union[int, str]
     subject: str
-    status: Dict[str, Any]
+    status: Optional[Dict[str, Any]] = None
     priority: Optional[Dict[str, Any]] = None
     assignee: Optional[Dict[str, Any]] = None
     due_date: Optional[str] = None
     done_ratio: Optional[int] = None
-    created_at: str
-    updated_at: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     description: Optional[Dict[str, Any]] = None
-
 
 class ProjectStatusReportResponse(BaseModel):
     """Response model for project status report."""
-    project_id: int
+    project_id: Union[int, str]
     project_type: str
     report: str
-    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     work_packages_analyzed: int
     openproject_base_url: str

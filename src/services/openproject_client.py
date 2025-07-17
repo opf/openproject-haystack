@@ -4,7 +4,7 @@ import httpx
 import logging
 import base64
 from typing import List, Dict, Any, Optional
-from src.api.schemas import WorkPackage
+from src.models.schemas import WorkPackage
 
 logger = logging.getLogger(__name__)
 
