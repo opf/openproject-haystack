@@ -179,6 +179,7 @@ class ProjectStatusReportRequest(BaseModel):
     """Request model for project status report generation."""
     project: ProjectInfo = Field(..., description="Project information")
     openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+    debug: Optional[bool] = Field(default=False, description="Debug mode for OpenProject API authentication")
 
 
 class WorkPackage(BaseModel):
@@ -218,6 +219,7 @@ class ProjectManagementHintsRequest(BaseModel):
     """Request model for project management hints generation."""
     project: ProjectInfo = Field(..., description="Project information")
     openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+    debug: Optional[bool] = Field(default=False, description="Debug mode for OpenProject API authentication")
 
 
 class ProjectManagementHintsResponse(BaseModel):

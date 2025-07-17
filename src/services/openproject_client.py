@@ -20,20 +20,30 @@ class OpenProjectAPIError(Exception):
 class OpenProjectClient:
     """Client for interacting with OpenProject API."""
     
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, debug: bool = False):
         """Initialize the OpenProject client.
         
         Args:
             base_url: Base URL of the OpenProject instance
             api_key: API key for authentication
+            debug: If True, use Basic auth with apikey prefix. If False, use Bearer token.
         """
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
-        # Create Basic auth header using base64 encoding of 'apikey:' + api_key
-        auth_string = f"apikey:{api_key}"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        self.debug = debug
+        
+        # Set authorization header based on debug mode
+        if debug:
+            # Debug mode: Use Basic auth with apikey prefix (current behavior)
+            auth_string = f"apikey:{api_key}"
+            encoded_auth = base64.b64encode(auth_string.encode()).decode()
+            authorization_header = f"Basic {encoded_auth}"
+        else:
+            # Production mode: Use Bearer token
+            authorization_header = f"Bearer {api_key}"
+        
         self.headers = {
-            "Authorization": f"Basic {encoded_auth}",
+            "Authorization": authorization_header,
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/hal+json",
             "Content-Type": "application/json"

@@ -531,6 +531,7 @@ async def generate_project_status_report(
         project_type = request.project.type
         base_url = request.openproject.base_url
         user_token = request.openproject.user_token
+        debug = request.debug
         
         # Validate user token
         if not user_token:
@@ -545,10 +546,11 @@ async def generate_project_status_report(
                 }
             )
         
-        # Initialize OpenProject client
+        # Initialize OpenProject client with debug parameter
         openproject_client = OpenProjectClient(
             base_url=base_url,
-            api_key=user_token
+            api_key=user_token,
+            debug=debug
         )
         
         logger.info(f"Generating project status report for project {project_id} (type: {project_type})")
@@ -670,6 +672,7 @@ async def generate_project_management_hints(
         project_type = request.project.type
         base_url = request.openproject.base_url
         user_token = request.openproject.user_token
+        debug = request.debug
         
         # Validate user token
         if not user_token:
@@ -684,10 +687,11 @@ async def generate_project_management_hints(
                 }
             )
         
-        # Initialize OpenProject client
+        # Initialize OpenProject client with debug parameter
         openproject_client = OpenProjectClient(
             base_url=base_url,
-            api_key=user_token
+            api_key=user_token,
+            debug=debug
         )
         
         logger.info(f"Generating project management hints for project {project_id} (type: {project_type})")
