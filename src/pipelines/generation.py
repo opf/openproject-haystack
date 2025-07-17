@@ -2,13 +2,14 @@
 
 from haystack_integrations.components.generators.ollama import OllamaGenerator
 from config.settings import settings
-from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage
+from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage, Tool, ToolChoice, FunctionCall
 from src.templates.report_templates import ProjectReportAnalyzer, ProjectStatusReportTemplate
 from typing import List, Tuple, Dict, Any
 import uuid
 import re
 import requests
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,10 @@ class GenerationPipeline:
         Returns:
             Tuple of (generated_response, usage_info)
         """
+        # Check if this is a BlockNote function calling request
+        if self._is_blocknote_request(request):
+            return self._handle_blocknote_function_call(request)
+        
         # Convert messages to a single prompt
         prompt = self._messages_to_prompt(request.messages)
         
@@ -279,6 +284,207 @@ class GenerationPipeline:
         hints_json = result["replies"][0]
         
         return hints_json
+    
+    def _is_blocknote_request(self, request: ChatCompletionRequest) -> bool:
+        """Check if this is a BlockNote function calling request.
+        
+        Args:
+            request: Chat completion request
+            
+        Returns:
+            True if this is a BlockNote request
+        """
+        if not request.tools or not request.tool_choice:
+            return False
+        
+        # Check if there's a "json" function tool
+        for tool in request.tools:
+            if tool.function.name == "json":
+                return True
+        
+        # Check if tool_choice specifies the "json" function
+        if (request.tool_choice and 
+            request.tool_choice.type == "function" and 
+            request.tool_choice.function.get("name") == "json"):
+            return True
+        
+        return False
+    
+    def _handle_blocknote_function_call(self, request: ChatCompletionRequest) -> Tuple[str, dict]:
+        """Handle BlockNote function calling request.
+        
+        Args:
+            request: Chat completion request with BlockNote function calling
+            
+        Returns:
+            Tuple of (function_call_response, usage_info)
+        """
+        logger.info("Processing BlockNote function calling request")
+        
+        # Find the json function tool
+        json_tool = None
+        for tool in request.tools:
+            if tool.function.name == "json":
+                json_tool = tool
+                break
+        
+        if not json_tool:
+            raise ValueError("No 'json' function found in tools")
+        
+        # Create enhanced prompt for BlockNote operations
+        prompt = self._create_blocknote_prompt(request.messages, json_tool)
+        
+        # Create generator with BlockNote-specific parameters
+        generator = OllamaGenerator(
+            model=request.model,
+            url=settings.OLLAMA_URL,
+            generation_kwargs={
+                "num_predict": request.max_tokens or 1000,
+                "temperature": request.temperature or 0.1,  # Lower temperature for more consistent JSON
+                "top_p": request.top_p or 0.9,
+                "stop": request.stop or [],
+                "format": "json"  # Request JSON format if supported by Ollama
+            }
+        )
+        
+        # Generate response
+        result = generator.run(prompt)
+        response_text = result["replies"][0]
+        
+        # Process and validate the response
+        function_arguments = self._process_blocknote_response(response_text, json_tool)
+        
+        # Calculate token usage
+        prompt_tokens = self._estimate_tokens(prompt)
+        completion_tokens = self._estimate_tokens(function_arguments)
+        
+        usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens
+        }
+        
+        # Return as function call format (the API endpoint will format this properly)
+        return function_arguments, usage
+    
+    def _create_blocknote_prompt(self, messages: List[ChatMessage], json_tool: Tool) -> str:
+        """Create an enhanced prompt for BlockNote operations.
+        
+        Args:
+            messages: Original chat messages
+            json_tool: The JSON function tool definition
+            
+        Returns:
+            Enhanced prompt for BlockNote operations
+        """
+        # Convert messages to prompt
+        base_prompt = self._messages_to_prompt(messages)
+        
+        # Add BlockNote-specific instructions
+        blocknote_instructions = f"""
+
+IMPORTANT: You must respond with ONLY valid JSON that matches the exact schema provided. Do not include any explanatory text, markdown formatting, or additional commentary.
+
+The JSON schema you must follow is:
+{json.dumps(json_tool.function.parameters, indent=2)}
+
+Your response must be a valid JSON object that can be parsed directly. The response should contain operations that manipulate the document blocks according to the user's request.
+
+Remember:
+- Each list item should be a separate block
+- Block IDs must be preserved exactly (including trailing $)
+- Use the cursor position to determine where to insert new content
+- Prefer updating existing blocks over removing and adding when possible
+
+Respond with ONLY the JSON object, no other text:"""
+        
+        return base_prompt + blocknote_instructions
+    
+    def _process_blocknote_response(self, response_text: str, json_tool: Tool) -> str:
+        """Process and validate BlockNote response.
+        
+        Args:
+            response_text: Raw response from the AI
+            json_tool: The JSON function tool definition
+            
+        Returns:
+            Validated JSON string for function arguments
+        """
+        try:
+            # Clean the response text
+            cleaned_response = response_text.strip()
+            
+            # Try to extract JSON if there's extra text
+            json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
+            if json_match:
+                cleaned_response = json_match.group(0)
+            
+            # Parse and validate JSON
+            parsed_json = json.loads(cleaned_response)
+            
+            # Basic validation - ensure it has the operations field
+            if not isinstance(parsed_json, dict):
+                raise ValueError("Response is not a JSON object")
+            
+            if "operations" not in parsed_json:
+                raise ValueError("Response missing 'operations' field")
+            
+            if not isinstance(parsed_json["operations"], list):
+                raise ValueError("'operations' field is not a list")
+            
+            # Validate each operation has required fields
+            for i, operation in enumerate(parsed_json["operations"]):
+                if not isinstance(operation, dict):
+                    raise ValueError(f"Operation {i} is not an object")
+                
+                if "type" not in operation:
+                    raise ValueError(f"Operation {i} missing 'type' field")
+                
+                op_type = operation["type"]
+                if op_type not in ["update", "add", "delete"]:
+                    raise ValueError(f"Operation {i} has invalid type: {op_type}")
+                
+                # Validate required fields based on operation type
+                if op_type == "update":
+                    if "id" not in operation or "block" not in operation:
+                        raise ValueError(f"Update operation {i} missing required fields")
+                elif op_type == "add":
+                    if not all(field in operation for field in ["referenceId", "position", "blocks"]):
+                        raise ValueError(f"Add operation {i} missing required fields")
+                elif op_type == "delete":
+                    if "id" not in operation:
+                        raise ValueError(f"Delete operation {i} missing 'id' field")
+            
+            logger.info(f"Successfully validated BlockNote response with {len(parsed_json['operations'])} operations")
+            return json.dumps(parsed_json, separators=(',', ':'))
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse BlockNote JSON response: {e}")
+            logger.error(f"Raw response: {response_text}")
+            
+            # Return a fallback error operation
+            fallback_response = {
+                "operations": [{
+                    "type": "update",
+                    "id": "error",
+                    "block": "<p>Error: Could not process the request. Please try again.</p>"
+                }]
+            }
+            return json.dumps(fallback_response, separators=(',', ':'))
+            
+        except ValueError as e:
+            logger.error(f"BlockNote response validation failed: {e}")
+            logger.error(f"Raw response: {response_text}")
+            
+            # Return a fallback error operation
+            fallback_response = {
+                "operations": [{
+                    "type": "update", 
+                    "id": "error",
+                    "block": f"<p>Validation Error: {str(e)}</p>"
+                }]
+            }
+            return json.dumps(fallback_response, separators=(',', ':'))
     
     def get_available_models(self) -> List[str]:
         """Get list of available models.

@@ -23,10 +23,36 @@ class HealthResponse(BaseModel):
 
 # OpenAI Chat Completion Compatible Models
 
+class FunctionCall(BaseModel):
+    """Function call information."""
+    name: str
+    arguments: str
+
+
 class ChatMessage(BaseModel):
     """A chat message with role and content."""
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: Optional[str] = None
+    function_call: Optional[FunctionCall] = None
+
+
+class ToolFunction(BaseModel):
+    """Function definition for a tool."""
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+
+class Tool(BaseModel):
+    """Tool definition."""
+    type: Literal["function"]
+    function: ToolFunction
+
+
+class ToolChoice(BaseModel):
+    """Tool choice specification."""
+    type: Literal["function"]
+    function: Dict[str, str]  # {"name": "function_name"}
 
 
 class ChatCompletionRequest(BaseModel):
@@ -40,6 +66,8 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
     stop: Optional[List[str]] = None
     stream: Optional[bool] = False
+    tools: Optional[List[Tool]] = None
+    tool_choice: Optional[ToolChoice] = None
 
 
 class Usage(BaseModel):
@@ -53,7 +81,7 @@ class ChatChoice(BaseModel):
     """A chat completion choice."""
     index: int
     message: ChatMessage
-    finish_reason: Literal["stop", "length", "content_filter"] = "stop"
+    finish_reason: Literal["stop", "length", "content_filter", "function_call"] = "stop"
 
 
 class ChatCompletionResponse(BaseModel):

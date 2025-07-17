@@ -6,7 +6,8 @@ from src.models.schemas import (
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatChoice,
     Usage, ModelsResponse, ModelInfo, ErrorResponse, ErrorDetail,
     ProjectStatusReportRequest, ProjectStatusReportResponse,
-    ProjectManagementHintsRequest, ProjectManagementHintsResponse
+    ProjectManagementHintsRequest, ProjectManagementHintsResponse,
+    FunctionCall
 )
 from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
@@ -73,21 +74,50 @@ def create_chat_completion(request: ChatCompletionRequest):
         # Create response in OpenAI format
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
         
-        response = ChatCompletionResponse(
-            id=completion_id,
-            model=request.model,
-            choices=[
-                ChatChoice(
-                    index=0,
-                    message=ChatMessage(
-                        role="assistant",
-                        content=response_text
-                    ),
-                    finish_reason="stop"
-                )
-            ],
-            usage=Usage(**usage_info)
-        )
+        # Check if this is a function call response (BlockNote)
+        is_function_call = (request.tools and 
+                           request.tool_choice and 
+                           request.tool_choice.type == "function" and
+                           request.tool_choice.function.get("name") == "json")
+        
+        if is_function_call:
+            # Format as function call response
+            response = ChatCompletionResponse(
+                id=completion_id,
+                model=request.model,
+                choices=[
+                    ChatChoice(
+                        index=0,
+                        message=ChatMessage(
+                            role="assistant",
+                            content=None,
+                            function_call=FunctionCall(
+                                name="json",
+                                arguments=response_text
+                            )
+                        ),
+                        finish_reason="function_call"
+                    )
+                ],
+                usage=Usage(**usage_info)
+            )
+        else:
+            # Regular text response
+            response = ChatCompletionResponse(
+                id=completion_id,
+                model=request.model,
+                choices=[
+                    ChatChoice(
+                        index=0,
+                        message=ChatMessage(
+                            role="assistant",
+                            content=response_text
+                        ),
+                        finish_reason="stop"
+                    )
+                ],
+                usage=Usage(**usage_info)
+            )
         
         return response
         
