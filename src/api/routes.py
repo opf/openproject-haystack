@@ -348,7 +348,7 @@ def get_model(model_id: str):
 @router.post("/evaluate-projects-similarities", response_model=SuggestResponse)
 def suggest_endpoint(request: SuggestRequest):
     try:
-        result = pipeline.suggest(request.project_id)
+        result = pipeline.suggest(str(request.project_id))
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

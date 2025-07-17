@@ -156,13 +156,13 @@ class SuggestionPipeline:
         return '\n'.join(prompt)
 
     def _llm_score_candidates(self, portfolio_project: dict, sub_projects: List[dict]) -> tuple[list[Candidate], str]:
+        """
+        Parse LLM response and return a list of suitable candidate projects.
+        Returns: (List[Candidate], str) -- candidates and raw LLM response.
+        """
         prompt = self._build_suggestion_prompt(portfolio_project, sub_projects)
         logger.info(f"LLM prompt for suggestion pipeline:\n{prompt}")
-        try:
-            llm_response = generation_pipeline.generate(prompt)
-        except TypeError:
-            llm_response = generation_pipeline.generate(prompt)
-
+        llm_response = generation_pipeline.generate(prompt)
         raw_candidates = []
         # 1. Try parsing as a JSON array
         try:
@@ -183,8 +183,8 @@ class SuggestionPipeline:
                     raw_candidates = [raw_candidates]
             except Exception:
                 # 3. Use regex to extract all JSON objects
+                # This regex extracts all top-level JSON objects from the LLM response.
                 objects = re.findall(r"{[^{}]*}", llm_response, re.DOTALL)
-                # Ensure raw_candidates is a list
                 if not isinstance(raw_candidates, list):
                     raw_candidates = []
                 for obj in objects:
