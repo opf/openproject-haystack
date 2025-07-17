@@ -7,7 +7,8 @@ from src.models.schemas import (
     Usage, ModelsResponse, ModelInfo, ErrorResponse, ErrorDetail,
     ProjectStatusReportRequest, ProjectStatusReportResponse,
     ProjectManagementHintsRequest, ProjectManagementHintsResponse,
-    FunctionCall
+    FunctionCall, ToolCall, ToolCallFunction, ChatCompletionStreamingResponse,
+    ChatChoiceStreaming, DeltaMessage
 )
 from src.pipelines.generation import generation_pipeline
 from src.services.openproject_client import OpenProjectClient, OpenProjectAPIError
@@ -43,7 +44,7 @@ def generate_text(request: GenerationRequest):
 
 # OpenAI-compatible endpoints
 
-@router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+@router.post("/v1/chat/completions")
 def create_chat_completion(request: ChatCompletionRequest):
     """Create a chat completion (OpenAI-compatible endpoint).
     
@@ -51,7 +52,7 @@ def create_chat_completion(request: ChatCompletionRequest):
         request: Chat completion request with messages and parameters
         
     Returns:
-        Chat completion response in OpenAI format
+        Chat completion response in OpenAI format (streaming or non-streaming)
     """
     try:
         # Validate that we have at least one message
@@ -68,58 +69,24 @@ def create_chat_completion(request: ChatCompletionRequest):
                 }
             )
         
-        # Generate response using the pipeline
-        response_text, usage_info = generation_pipeline.chat_completion(request)
+        # Check if this is a BlockNote tool calling request
+        is_blocknote_request = (request.tools and 
+                               request.tool_choice and 
+                               request.tool_choice.type == "function" and
+                               request.tool_choice.function.get("name") == "json")
         
-        # Create response in OpenAI format
-        completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
-        
-        # Check if this is a function call response (BlockNote)
-        is_function_call = (request.tools and 
-                           request.tool_choice and 
-                           request.tool_choice.type == "function" and
-                           request.tool_choice.function.get("name") == "json")
-        
-        if is_function_call:
-            # Format as function call response
-            response = ChatCompletionResponse(
-                id=completion_id,
-                model=request.model,
-                choices=[
-                    ChatChoice(
-                        index=0,
-                        message=ChatMessage(
-                            role="assistant",
-                            content=None,
-                            function_call=FunctionCall(
-                                name="json",
-                                arguments=response_text
-                            )
-                        ),
-                        finish_reason="function_call"
-                    )
-                ],
-                usage=Usage(**usage_info)
-            )
+        if is_blocknote_request and request.stream:
+            # Handle BlockNote streaming tool calls
+            return _create_blocknote_streaming_response(request)
+        elif is_blocknote_request:
+            # Handle BlockNote non-streaming tool calls
+            return _create_blocknote_response(request)
+        elif request.stream:
+            # Handle regular streaming
+            return _create_streaming_response(request)
         else:
-            # Regular text response
-            response = ChatCompletionResponse(
-                id=completion_id,
-                model=request.model,
-                choices=[
-                    ChatChoice(
-                        index=0,
-                        message=ChatMessage(
-                            role="assistant",
-                            content=response_text
-                        ),
-                        finish_reason="stop"
-                    )
-                ],
-                usage=Usage(**usage_info)
-            )
-        
-        return response
+            # Handle regular non-streaming
+            return _create_regular_response(request)
         
     except HTTPException:
         raise
@@ -135,6 +102,281 @@ def create_chat_completion(request: ChatCompletionRequest):
                 }
             }
         )
+
+
+def _create_blocknote_streaming_response(request: ChatCompletionRequest):
+    """Create a streaming response for BlockNote tool calls."""
+    from fastapi.responses import StreamingResponse
+    import json
+    import time
+    
+    def generate_blocknote_stream():
+        try:
+            # Generate response using the pipeline
+            response_text, usage_info = generation_pipeline.chat_completion(request)
+            
+            # Create completion ID
+            completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+            created_time = int(time.time())
+            
+            # Create tool call ID
+            tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+            
+            # First chunk - start tool call
+            first_chunk = ChatCompletionStreamingResponse(
+                id=completion_id,
+                model=request.model,
+                created=created_time,
+                choices=[
+                    ChatChoiceStreaming(
+                        index=0,
+                        delta=DeltaMessage(
+                            role="assistant",
+                            content=None,
+                            tool_calls=[
+                                ToolCall(
+                                    id=tool_call_id,
+                                    type="function",
+                                    function=ToolCallFunction(
+                                        name="json",
+                                        arguments=""
+                                    )
+                                )
+                            ]
+                        ),
+                        finish_reason=None
+                    )
+                ],
+                system_fingerprint="fp_local_ollama",
+                service_tier="default"
+            )
+            
+            yield f"data: {first_chunk.model_dump_json()}\n\n"
+            
+            # Stream the JSON arguments character by character
+            for i, char in enumerate(response_text):
+                chunk = ChatCompletionStreamingResponse(
+                    id=completion_id,
+                    model=request.model,
+                    created=created_time,
+                    choices=[
+                        ChatChoiceStreaming(
+                            index=0,
+                            delta=DeltaMessage(
+                                tool_calls=[
+                                    ToolCall(
+                                        id=tool_call_id,
+                                        type="function",
+                                        function=ToolCallFunction(
+                                            name="json",
+                                            arguments=char
+                                        )
+                                    )
+                                ]
+                            ),
+                            finish_reason=None
+                        )
+                    ],
+                    system_fingerprint="fp_local_ollama",
+                    service_tier="default"
+                )
+                
+                yield f"data: {chunk.model_dump_json()}\n\n"
+            
+            # Final chunk - end stream
+            final_chunk = ChatCompletionStreamingResponse(
+                id=completion_id,
+                model=request.model,
+                created=created_time,
+                choices=[
+                    ChatChoiceStreaming(
+                        index=0,
+                        delta=DeltaMessage(),
+                        finish_reason="tool_calls"
+                    )
+                ],
+                system_fingerprint="fp_local_ollama",
+                service_tier="default"
+            )
+            
+            yield f"data: {final_chunk.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"Error in BlockNote streaming: {str(e)}")
+            error_chunk = {
+                "error": {
+                    "message": f"Internal server error: {str(e)}",
+                    "type": "internal_error",
+                    "code": "internal_error"
+                }
+            }
+            yield f"data: {json.dumps(error_chunk)}\n\n"
+    
+    return StreamingResponse(
+        generate_blocknote_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/plain; charset=utf-8"
+        }
+    )
+
+
+def _create_blocknote_response(request: ChatCompletionRequest):
+    """Create a non-streaming response for BlockNote tool calls."""
+    # Generate response using the pipeline
+    response_text, usage_info = generation_pipeline.chat_completion(request)
+    
+    # Create response in modern tool_calls format
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+    tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+    
+    response = ChatCompletionResponse(
+        id=completion_id,
+        model=request.model,
+        choices=[
+            ChatChoice(
+                index=0,
+                message=ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        ToolCall(
+                            id=tool_call_id,
+                            type="function",
+                            function=ToolCallFunction(
+                                name="json",
+                                arguments=response_text
+                            )
+                        )
+                    ]
+                ),
+                finish_reason="tool_calls"
+            )
+        ],
+        usage=Usage(**usage_info)
+    )
+    
+    return response
+
+
+def _create_streaming_response(request: ChatCompletionRequest):
+    """Create a streaming response for regular chat."""
+    from fastapi.responses import StreamingResponse
+    import json
+    import time
+    
+    def generate_stream():
+        try:
+            # Generate response using the pipeline
+            response_text, usage_info = generation_pipeline.chat_completion(request)
+            
+            # Create completion ID
+            completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+            created_time = int(time.time())
+            
+            # First chunk with role
+            first_chunk = ChatCompletionStreamingResponse(
+                id=completion_id,
+                model=request.model,
+                created=created_time,
+                choices=[
+                    ChatChoiceStreaming(
+                        index=0,
+                        delta=DeltaMessage(role="assistant"),
+                        finish_reason=None
+                    )
+                ]
+            )
+            
+            yield f"data: {first_chunk.model_dump_json()}\n\n"
+            
+            # Stream content word by word
+            words = response_text.split()
+            for i, word in enumerate(words):
+                content = word + (" " if i < len(words) - 1 else "")
+                
+                chunk = ChatCompletionStreamingResponse(
+                    id=completion_id,
+                    model=request.model,
+                    created=created_time,
+                    choices=[
+                        ChatChoiceStreaming(
+                            index=0,
+                            delta=DeltaMessage(content=content),
+                            finish_reason=None
+                        )
+                    ]
+                )
+                
+                yield f"data: {chunk.model_dump_json()}\n\n"
+            
+            # Final chunk
+            final_chunk = ChatCompletionStreamingResponse(
+                id=completion_id,
+                model=request.model,
+                created=created_time,
+                choices=[
+                    ChatChoiceStreaming(
+                        index=0,
+                        delta=DeltaMessage(),
+                        finish_reason="stop"
+                    )
+                ]
+            )
+            
+            yield f"data: {final_chunk.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"Error in streaming: {str(e)}")
+            error_chunk = {
+                "error": {
+                    "message": f"Internal server error: {str(e)}",
+                    "type": "internal_error",
+                    "code": "internal_error"
+                }
+            }
+            yield f"data: {json.dumps(error_chunk)}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/plain; charset=utf-8"
+        }
+    )
+
+
+def _create_regular_response(request: ChatCompletionRequest):
+    """Create a regular non-streaming response."""
+    # Generate response using the pipeline
+    response_text, usage_info = generation_pipeline.chat_completion(request)
+    
+    # Create response in OpenAI format
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+    
+    response = ChatCompletionResponse(
+        id=completion_id,
+        model=request.model,
+        choices=[
+            ChatChoice(
+                index=0,
+                message=ChatMessage(
+                    role="assistant",
+                    content=response_text
+                ),
+                finish_reason="stop"
+            )
+        ],
+        usage=Usage(**usage_info)
+    )
+    
+    return response
 
 
 # RAG Management endpoints

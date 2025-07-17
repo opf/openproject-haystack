@@ -24,16 +24,38 @@ class HealthResponse(BaseModel):
 # OpenAI Chat Completion Compatible Models
 
 class FunctionCall(BaseModel):
-    """Function call information."""
+    """Function call information (deprecated, use ToolCall instead)."""
     name: str
     arguments: str
+
+
+class ToolCallFunction(BaseModel):
+    """Function information within a tool call."""
+    name: str
+    arguments: str
+
+
+class ToolCall(BaseModel):
+    """Tool call information."""
+    id: str
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
 
 
 class ChatMessage(BaseModel):
     """A chat message with role and content."""
     role: Literal["system", "user", "assistant"]
     content: Optional[str] = None
-    function_call: Optional[FunctionCall] = None
+    function_call: Optional[FunctionCall] = None  # Deprecated
+    tool_calls: Optional[List[ToolCall]] = None
+
+
+class DeltaMessage(BaseModel):
+    """Delta message for streaming responses."""
+    role: Optional[Literal["system", "user", "assistant"]] = None
+    content: Optional[str] = None
+    function_call: Optional[FunctionCall] = None  # Deprecated
+    tool_calls: Optional[List[ToolCall]] = None
 
 
 class ToolFunction(BaseModel):
@@ -81,7 +103,14 @@ class ChatChoice(BaseModel):
     """A chat completion choice."""
     index: int
     message: ChatMessage
-    finish_reason: Literal["stop", "length", "content_filter", "function_call"] = "stop"
+    finish_reason: Literal["stop", "length", "content_filter", "function_call", "tool_calls"] = "stop"
+
+
+class ChatChoiceStreaming(BaseModel):
+    """A streaming chat completion choice."""
+    index: int
+    delta: DeltaMessage
+    finish_reason: Optional[Literal["stop", "length", "content_filter", "function_call", "tool_calls"]] = None
 
 
 class ChatCompletionResponse(BaseModel):
@@ -92,6 +121,17 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[ChatChoice]
     usage: Usage
+
+
+class ChatCompletionStreamingResponse(BaseModel):
+    """OpenAI-compatible streaming chat completion response."""
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int = Field(default_factory=lambda: int(time.time()))
+    model: str
+    choices: List[ChatChoiceStreaming]
+    system_fingerprint: Optional[str] = None
+    service_tier: Optional[str] = None
 
 
 class ModelInfo(BaseModel):

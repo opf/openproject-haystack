@@ -2,7 +2,7 @@
 
 from haystack_integrations.components.generators.ollama import OllamaGenerator
 from config.settings import settings
-from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage, Tool, ToolChoice, FunctionCall
+from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage, Tool, ToolChoice, FunctionCall, ToolCall, ToolCallFunction
 from src.templates.report_templates import ProjectReportAnalyzer, ProjectStatusReportTemplate
 from typing import List, Tuple, Dict, Any
 import uuid
