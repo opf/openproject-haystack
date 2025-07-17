@@ -521,16 +521,25 @@ JSON SCHEMA REQUIREMENTS:
 - ALL strings must be properly escaped and quoted
 - ALL objects and arrays must be properly closed
 
-CRITICAL RULES:
-- Block IDs must be preserved exactly (including trailing $)
+CRITICAL BLOCK STRUCTURE RULES:
+- Each "block" field MUST contain EXACTLY ONE HTML element (one root tag)
+- NEVER put multiple HTML elements in a single "block" field
+- If you want multiple elements, use separate blocks in the "blocks" array
 - Each list item should be a separate block: <ul><li>item</li></ul>
-- The "blocks" field in add operations must be an array of HTML strings, not objects
-- Use rich HTML: <h1>, <h2>, <p>, <ul><li>, <strong>, <em> as appropriate
-- Generate multiple blocks for comprehensive content
-- ALWAYS complete the entire JSON structure - incomplete JSON will cause errors
+- Properly escape quotes in HTML attributes: use \\" for quotes inside JSON strings
+- Block IDs must be preserved exactly (including trailing $)
+
+VALID BLOCK EXAMPLES:
+- "<p>This is one paragraph</p>"
+- "<h1>This is a heading</h1>"
+- "<ul><li>This is one list item</li></ul>"
+
+INVALID BLOCK EXAMPLES (DO NOT DO THIS):
+- "<h1>Title</h1><p>Paragraph</p>" (multiple elements in one block)
+- "<p>Text with "quotes" inside</p>" (unescaped quotes)
 
 Example of COMPLETE JSON for substantial content:
-{"operations":[{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"},{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives. This system of governance has evolved over centuries and represents one of humanity's most significant political achievements.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights. These principles ensure that all citizens have an equal voice in the political process while protecting the rights of those who may be in the minority.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>","<ul><li>Rule of law and independent judiciary</li></ul>","<ul><li>Freedom of speech, press, and assembly</li></ul>"]}]}
+{"operations":[{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"},{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>"]}]}
 
 RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
     
@@ -665,10 +674,15 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
             if "id" not in operation or "block" not in operation:
                 logger.warning(f"Update operation {index} missing required fields, skipping")
                 return None
+            
+            # Fix the block content - handle multi-element blocks
+            block_content = str(operation["block"])
+            fixed_block = self._fix_block_content(block_content, index)
+            
             return {
                 "type": "update",
                 "id": str(operation["id"]),
-                "block": str(operation["block"])
+                "block": fixed_block
             }
         
         # Fix add operations
@@ -688,15 +702,22 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
                 if isinstance(block, dict):
                     # AI sometimes creates objects instead of strings
                     if "block" in block:
-                        fixed_blocks.append(str(block["block"]))
+                        block_content = str(block["block"])
                     elif "content" in block:
-                        fixed_blocks.append(str(block["content"]))
+                        block_content = str(block["content"])
                     else:
                         logger.warning(f"Skipping malformed block object in operation {index}, block {j}")
+                        continue
                 elif isinstance(block, str):
-                    fixed_blocks.append(block)
+                    block_content = block
                 else:
                     logger.warning(f"Skipping non-string block in operation {index}, block {j}")
+                    continue
+                
+                # Fix each block content
+                fixed_block = self._fix_block_content(block_content, f"{index}.{j}")
+                if fixed_block:
+                    fixed_blocks.append(fixed_block)
             
             if not fixed_blocks:
                 logger.warning(f"Add operation {index} has no valid blocks, skipping")
@@ -720,6 +741,62 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
             }
         
         return None
+    
+    def _fix_block_content(self, block_content: str, block_id: str) -> str:
+        """Fix block content to ensure it contains only one HTML element.
+        
+        Args:
+            block_content: The block content to fix
+            block_id: Block identifier for logging
+            
+        Returns:
+            Fixed block content with single HTML element
+        """
+        if not block_content or not block_content.strip():
+            logger.warning(f"Block {block_id} is empty")
+            return "<p></p>"
+        
+        block_content = block_content.strip()
+        
+        # Check if this looks like multiple HTML elements concatenated
+        # Simple heuristic: count opening tags
+        import re
+        opening_tags = re.findall(r'<[^/][^>]*>', block_content)
+        
+        if len(opening_tags) > 1:
+            logger.warning(f"Block {block_id} contains multiple HTML elements, taking first element")
+            
+            # Try to extract the first complete HTML element
+            first_tag_match = re.match(r'<([^>\s]+)[^>]*>', block_content)
+            if first_tag_match:
+                tag_name = first_tag_match.group(1)
+                
+                # Find the closing tag for this element
+                if tag_name.lower() in ['br', 'hr', 'img', 'input', 'meta', 'link']:
+                    # Self-closing tags
+                    end_pos = first_tag_match.end()
+                    return block_content[:end_pos]
+                else:
+                    # Find matching closing tag
+                    closing_tag = f"</{tag_name}>"
+                    closing_pos = block_content.find(closing_tag)
+                    if closing_pos != -1:
+                        return block_content[:closing_pos + len(closing_tag)]
+                    else:
+                        # No closing tag found, wrap in paragraph
+                        logger.warning(f"Block {block_id} has unclosed tag, wrapping in paragraph")
+                        return f"<p>{block_content}</p>"
+            
+            # Fallback: wrap everything in a paragraph
+            logger.warning(f"Block {block_id} could not be parsed, wrapping in paragraph")
+            return f"<p>{block_content}</p>"
+        
+        # Single element or plain text - ensure it's wrapped properly
+        if not block_content.startswith('<'):
+            # Plain text, wrap in paragraph
+            return f"<p>{block_content}</p>"
+        
+        return block_content
     
     def _validate_blocknote_structure(self, parsed_json: dict) -> None:
         """Validate the final BlockNote structure.
