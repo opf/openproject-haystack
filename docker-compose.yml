@@ -32,7 +32,7 @@ services:
       - ./scripts:/scripts:ro
     environment:
       - OLLAMA_HOST=http://ollama:11434
-      - MODELS_TO_PULL=${MODELS_TO_PULL:-mixtral:8x7b}
+      - MODELS_TO_PULL=${MODELS_TO_PULL:-mistral:latest}
     depends_on:
       ollama:
         condition: service_healthy
