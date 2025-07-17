@@ -492,12 +492,36 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
         """
         return """
 
-CRITICAL JSON COMPLETION REQUIREMENTS:
-- You MUST respond with ONLY complete, valid JSON that matches the exact schema
+CRITICAL JSON FORMAT REQUIREMENTS - FOLLOW EXACTLY:
+- You MUST respond with ONLY complete, valid JSON that matches the EXACT schema below
 - NO explanatory text, NO markdown, NO comments, NO incomplete responses
-- The JSON MUST be complete with all opening and closing braces, brackets, and quotes
+- The JSON MUST start with { and end with }
 - NEVER stop generating until the JSON is completely finished
-- End your response with the final closing brace }
+
+MANDATORY JSON STRUCTURE - DO NOT DEVIATE:
+{
+  "operations": [
+    {
+      "type": "update",
+      "id": "exact-block-id-with-dollar$",
+      "block": "<single-html-element>content</single-html-element>"
+    },
+    {
+      "type": "add", 
+      "referenceId": "exact-block-id-with-dollar$",
+      "position": "after",
+      "blocks": [
+        "<single-html-element>content1</single-html-element>",
+        "<single-html-element>content2</single-html-element>"
+      ]
+    }
+  ]
+}
+
+FORBIDDEN JSON FORMATS (DO NOT USE):
+- [{"name":"operations","array":[...]}] (name/value format)
+- [{"type":"update",...}] (array at root level)
+- {"type":"update",...} (single operation without operations wrapper)
 
 CONTENT GENERATION REQUIREMENTS:
 - Generate COMPREHENSIVE, DETAILED content - not just titles or brief summaries
@@ -511,15 +535,6 @@ DOCUMENT MANIPULATION STRATEGY:
 - For longer content: Use multiple operations to create well-structured documents
 - Break content into logical paragraphs using separate blocks
 - Create proper document flow with headings, paragraphs, and lists as appropriate
-
-JSON SCHEMA REQUIREMENTS:
-- Root object MUST have "operations" array
-- Each operation MUST have "type" field: "update", "add", or "delete"
-- Update operations MUST have: type, id, block (where block is a single HTML string)
-- Add operations MUST have: type, referenceId, position, blocks (where blocks is array of HTML strings)
-- Delete operations MUST have: type, id
-- ALL strings must be properly escaped and quoted
-- ALL objects and arrays must be properly closed
 
 CRITICAL BLOCK STRUCTURE RULES:
 - Each "block" field MUST contain EXACTLY ONE HTML element (one root tag)
@@ -538,10 +553,10 @@ INVALID BLOCK EXAMPLES (DO NOT DO THIS):
 - "<h1>Title</h1><p>Paragraph</p>" (multiple elements in one block)
 - "<p>Text with "quotes" inside</p>" (unescaped quotes)
 
-Example of COMPLETE JSON for substantial content:
+COMPLETE EXAMPLE - COPY THIS EXACT STRUCTURE:
 {"operations":[{"type":"update","id":"block-id$","block":"<h1>Democracy: A Comprehensive Overview</h1>"},{"type":"add","referenceId":"block-id$","position":"after","blocks":["<p>Democracy is a form of government in which power is vested in the people, who rule either directly or through freely elected representatives.</p>","<p>The fundamental principles of democracy include popular sovereignty, political equality, and majority rule with minority rights.</p>","<h2>Key Characteristics of Democratic Systems</h2>","<ul><li>Free and fair elections held at regular intervals</li></ul>","<ul><li>Universal suffrage and equal voting rights</li></ul>","<ul><li>Protection of fundamental human rights and civil liberties</li></ul>"]}]}
 
-RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
+RESPOND WITH ONLY COMPLETE, VALID JSON MATCHING THE EXACT STRUCTURE ABOVE:"""
     
     def _process_blocknote_response(self, response_text: str, json_tool: Tool) -> str:
         """Process and validate BlockNote response.
@@ -861,6 +876,12 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
             Repaired JSON string or None if repair failed
         """
         try:
+            # First, try to detect and convert completely wrong formats
+            converted = self._convert_wrong_json_formats(response_text)
+            if converted:
+                logger.info("Successfully converted wrong JSON format to correct BlockNote format")
+                return converted
+            
             # Common fixes for AI-generated JSON
             cleaned = response_text.strip()
             
@@ -884,7 +905,142 @@ RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
             
             return json.dumps(fixed, separators=(',', ':'))
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"JSON repair failed: {e}")
+            return None
+    
+    def _convert_wrong_json_formats(self, response_text: str) -> str:
+        """Convert completely wrong JSON formats to correct BlockNote format.
+        
+        Args:
+            response_text: Raw response text
+            
+        Returns:
+            Corrected JSON string or None if conversion failed
+        """
+        try:
+            cleaned = response_text.strip()
+            
+            # Remove markdown
+            cleaned = re.sub(r'```json\s*', '', cleaned)
+            cleaned = re.sub(r'```\s*$', '', cleaned)
+            
+            # Try to parse as JSON first
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError:
+                # Try to fix basic JSON syntax issues first
+                cleaned = re.sub(r',\s*}', '}', cleaned)
+                cleaned = re.sub(r',\s*]', ']', cleaned)
+                try:
+                    parsed = json.loads(cleaned)
+                except json.JSONDecodeError:
+                    return None
+            
+            # Detect and convert wrong format #1: name/value structure
+            if self._is_name_value_format(parsed):
+                logger.info("Detected name/value format, converting...")
+                return self._convert_name_value_format(parsed)
+            
+            # Detect and convert wrong format #2: array at root level
+            if isinstance(parsed, list):
+                logger.info("Detected array at root level, converting...")
+                return self._convert_array_root_format(parsed)
+            
+            # Detect and convert wrong format #3: missing operations wrapper
+            if isinstance(parsed, dict) and "operations" not in parsed and "type" in parsed:
+                logger.info("Detected single operation without wrapper, converting...")
+                return json.dumps({"operations": [parsed]}, separators=(',', ':'))
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Format conversion failed: {e}")
+            return None
+    
+    def _is_name_value_format(self, parsed: any) -> bool:
+        """Check if this is the wrong name/value format.
+        
+        Args:
+            parsed: Parsed JSON object
+            
+        Returns:
+            True if this is name/value format
+        """
+        if isinstance(parsed, list) and len(parsed) > 0:
+            first_item = parsed[0]
+            if isinstance(first_item, dict) and "name" in first_item and "array" in first_item:
+                return True
+        return False
+    
+    def _convert_name_value_format(self, parsed: any) -> str:
+        """Convert name/value format to correct BlockNote format.
+        
+        Args:
+            parsed: Parsed JSON in wrong format
+            
+        Returns:
+            Corrected JSON string
+        """
+        try:
+            operations = []
+            
+            # Extract operations from the wrong format
+            if isinstance(parsed, list) and len(parsed) > 0:
+                operations_data = parsed[0].get("array", [])
+                
+                current_op = {}
+                for item in operations_data:
+                    if isinstance(item, dict) and "name" in item and "value" in item:
+                        name = item["name"]
+                        value = item["value"]
+                        
+                        if name == "type":
+                            # Start new operation
+                            if current_op:
+                                operations.append(current_op)
+                            current_op = {"type": value}
+                        elif name in ["id", "referenceId", "position", "block"]:
+                            current_op[name] = value
+                        elif name == "blocks":
+                            # Handle blocks array
+                            current_op["blocks"] = [value] if isinstance(value, str) else value
+                
+                # Add the last operation
+                if current_op:
+                    operations.append(current_op)
+            
+            if operations:
+                result = {"operations": operations}
+                # Validate and fix the result
+                fixed = self._fix_blocknote_json(result)
+                return json.dumps(fixed, separators=(',', ':'))
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Name/value format conversion failed: {e}")
+            return None
+    
+    def _convert_array_root_format(self, parsed: list) -> str:
+        """Convert array at root level to correct BlockNote format.
+        
+        Args:
+            parsed: Parsed JSON array
+            
+        Returns:
+            Corrected JSON string
+        """
+        try:
+            # Wrap the array in the correct operations structure
+            result = {"operations": parsed}
+            
+            # Validate and fix the result
+            fixed = self._fix_blocknote_json(result)
+            return json.dumps(fixed, separators=(',', ':'))
+            
+        except Exception as e:
+            logger.error(f"Array root format conversion failed: {e}")
             return None
     
     def get_available_models(self) -> List[str]:
