@@ -386,6 +386,9 @@ class GenerationPipeline:
         if request_type == "simple_operation":
             # Use minimal prompting for simple operations like translations
             blocknote_instructions = self._get_simple_operation_instructions()
+        elif request_type == "improvement_operation":
+            # Use focused prompting for text improvement operations
+            blocknote_instructions = self._get_improvement_operation_instructions()
         else:
             # Use comprehensive prompting for content creation
             blocknote_instructions = self._get_comprehensive_content_instructions()
@@ -399,7 +402,7 @@ class GenerationPipeline:
             messages: Chat messages to analyze
             
         Returns:
-            Request type: "simple_operation" or "content_creation"
+            Request type: "simple_operation", "improvement_operation", or "content_creation"
         """
         # Get the last user message to analyze the request
         user_messages = [msg for msg in messages if msg.role == "user"]
@@ -407,6 +410,19 @@ class GenerationPipeline:
             return "content_creation"
         
         last_message = user_messages[-1].content.lower()
+        
+        # Keywords that indicate improvement operations (enhance existing text)
+        improvement_keywords = [
+            "improve", "improve writing", "verbessern", "verbesserung",
+            "enhance", "polish", "refine", "make better", "better",
+            "optimize", "optimieren", "upgrade", "revise", "überarbeiten"
+        ]
+        
+        # Check for improvement operations first (more specific)
+        for keyword in improvement_keywords:
+            if keyword in last_message:
+                logger.info(f"Detected improvement operation request: {keyword}")
+                return "improvement_operation"
         
         # Keywords that indicate simple operations
         simple_operation_keywords = [
@@ -481,6 +497,59 @@ CRITICAL RULES:
 
 Example for translation:
 {"operations":[{"type":"update","id":"block-id$","block":"<p>Dies ist auf Deutsch</p>"}]}
+
+RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
+    
+    def _get_improvement_operation_instructions(self) -> str:
+        """Get instructions for text improvement operations.
+        
+        Returns:
+            Improvement operation instructions
+        """
+        return """
+
+CRITICAL JSON COMPLETION REQUIREMENTS:
+- You MUST respond with ONLY complete, valid JSON that matches the exact schema
+- NO explanatory text, NO markdown, NO comments, NO incomplete responses
+- The JSON MUST be complete with all opening and closing braces, brackets, and quotes
+- NEVER stop generating until the JSON is completely finished
+- End your response with the final closing brace }
+
+IMPROVEMENT OPERATION REQUIREMENTS:
+- Take the selected text and return ONLY an improved version of that same text
+- DO NOT create comprehensive guides or educational content about improvement
+- DO NOT add explanations, headers, disclaimers, or additional content
+- FOCUS on enhancing the existing text: grammar, clarity, style, flow
+- Keep the same meaning and intent, just make it better written
+- Maintain the original length and structure unless improvement requires changes
+
+IMPROVEMENT FOCUS AREAS:
+- Grammar and spelling corrections
+- Sentence structure and flow
+- Word choice and vocabulary
+- Clarity and readability
+- Professional tone (if appropriate)
+- Conciseness without losing meaning
+
+JSON SCHEMA REQUIREMENTS:
+- Root object MUST have "operations" array
+- Each operation MUST have "type" field: "update", "add", or "delete"
+- Update operations MUST have: type, id, block (where block is a single HTML string)
+- Add operations MUST have: type, referenceId, position, blocks (where blocks is array of HTML strings)
+- Delete operations MUST have: type, id
+- ALL strings must be properly escaped and quoted
+- ALL objects and arrays must be properly closed
+
+CRITICAL RULES:
+- Block IDs must be preserved exactly (including trailing $)
+- For improvement operations, typically use only ONE "update" operation
+- The "block" content should contain ONLY the improved version of the original text
+- DO NOT add extra blocks or additional content
+- Each "block" field MUST contain EXACTLY ONE HTML element
+
+EXAMPLE - Original: "Das ist auf Deutsch"
+GOOD IMPROVEMENT: {"operations":[{"type":"update","id":"block-id$","block":"<p>Dies ist ein Text in deutscher Sprache.</p>"}]}
+BAD IMPROVEMENT: {"operations":[{"type":"update","id":"block-id$","block":"<h1>Improving German Text</h1><p>Dies ist ein Text in deutscher Sprache.</p><p>Here are some tips for improving German writing...</p>"}]}
 
 RESPOND WITH ONLY COMPLETE, VALID JSON - NO OTHER TEXT:"""
     
