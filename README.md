@@ -1,5 +1,5 @@
 # OpenProject Haystack
-## AI-Powered Project Management for German Federal Government
+## AI-Powered Project Management
 
 [![OpenProject](https://img.shields.io/badge/OpenProject-Compatible-blue.svg)](https://www.openproject.org/)
 [![AI](https://img.shields.io/badge/AI-Powered-green.svg)](https://github.com/deepset-ai/haystack)
@@ -21,13 +21,13 @@
 
 ## 🎯 Executive Summary
 
-OpenProject Haystack is an AI-powered project management enhancement system that delivers automated compliance, proactive risk management, and data-driven decision support for German federal government projects. The system transforms traditional project management workflows into intelligent, automated processes that ensure PMFlex compliance while significantly reducing manual overhead.
+OpenProject Haystack is an AI-powered project management enhancement system that delivers automated compliance, proactive risk management, and data-driven decision support. The system transforms traditional project management workflows into intelligent, automated processes that ensure PMFlex compliance while significantly reducing manual overhead.
 
 ### Key Business Benefits
 
 | Capability | Traditional Approach | Our AI Solution | Business Impact |
 |------------|---------------------|-----------------|-----------------|
-| **Status Reports** | 4-8 hours manual work | 15 minutes automated | **80% time savings** |
+| **Status Reports** | 4-8 hours manual work | 2 minutes automated | **80% time savings** |
 | **Issue Detection** | Reactive (after problems occur) | Predictive (2-4 weeks early) | **40% reduction in overruns** |
 | **Compliance** | Manual review and correction | Automatic PMFlex adherence | **95% reduction in audit issues** |
 | **Quality** | Inconsistent, human error prone | AI-powered, standardized | **90% reduction in review time** |
