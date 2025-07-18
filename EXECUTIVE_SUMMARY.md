@@ -164,12 +164,12 @@ flowchart TD
     classDef start fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
     classDef process fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     classDef data fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef end fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    classDef final fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
     classDef annotation fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
     
     class A start
     class B,C,D,E,F process
-    class G,H end
+    class G,H final
     class C1,E1,F1 annotation
 ```
 
