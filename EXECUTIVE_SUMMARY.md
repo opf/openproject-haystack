@@ -92,6 +92,100 @@ flowchart LR
 
 ---
 
+## System Architecture & Component Integration
+
+### Complete System Overview
+
+```mermaid
+graph TB
+    %% External Systems
+    OP[🏢 OpenProject Instance<br/>Project Data Source]
+    USER[👤 Project Manager<br/>End User]
+    
+    %% PMFlex Knowledge Base
+    PM[📚 PMFlex.one<br/>German Federal Standards<br/>• Handbooks<br/>• Templates<br/>• Guidelines]
+    
+    %% Haystack System Core
+    subgraph "🤖 OpenProject Haystack System"
+        API[🔌 API Layer<br/>FastAPI Application<br/>• OpenAI Compatible<br/>• Project Endpoints]
+        
+        subgraph "🧠 AI Intelligence Core"
+            RAG[🔍 RAG Pipeline<br/>Document Retrieval<br/>• Vector Store<br/>• Context Enhancement]
+            LLM[⚡ Ollama LLM<br/>German Language<br/>• Report Generation<br/>• Hint Creation]
+        end
+        
+        subgraph "📊 Analysis Engine"
+            ANALYZER[🔬 Project Analyzer<br/>• 10 Health Checks<br/>• Risk Assessment<br/>• Performance Metrics]
+        end
+    end
+    
+    %% Data Flow
+    USER --> API
+    API --> OP
+    OP --> ANALYZER
+    ANALYZER --> RAG
+    PM --> RAG
+    RAG --> LLM
+    LLM --> API
+    API --> USER
+    
+    %% Styling
+    classDef external fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef knowledge fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef core fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef ai fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef analysis fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    
+    class OP,USER external
+    class PM knowledge
+    class API core
+    class RAG,LLM ai
+    class ANALYZER analysis
+```
+
+### Example Workflow: Smart Report Generation
+
+```mermaid
+flowchart TD
+    A[📋 Project Manager<br/>Requests Status Report] --> B[🔌 API Gateway<br/>Authentication & Validation]
+    B --> C[📊 Data Collection<br/>OpenProject API]
+    C --> D[🔬 Project Analysis<br/>Status, Progress, Risks]
+    D --> E[📚 PMFlex Context<br/>RAG Retrieval]
+    E --> F[🧠 AI Generation<br/>Ollama LLM]
+    F --> G[📄 PMFlex Report<br/>Professional German Output]
+    G --> H[✅ Delivery<br/>Ready for Stakeholders]
+    
+    %% Data enrichment annotations
+    C1[📈 Work Packages<br/>Teams & Timeline<br/>Progress Data] --> C
+    E1[📖 Compliance Standards<br/>Best Practices<br/>German Guidelines] --> E
+    F1[🎯 Structured Format<br/>Traffic Light Status<br/>Executive Summary] --> F
+    
+    %% Styling
+    classDef start fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef process fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef data fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef end fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    classDef annotation fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    
+    class A start
+    class B,C,D,E,F process
+    class G,H end
+    class C1,E1,F1 annotation
+```
+
+### Key Component Responsibilities
+
+| Component | Primary Function | Business Value |
+|-----------|------------------|----------------|
+| **PMFlex.one** | German federal compliance standards | Ensures 100% regulatory adherence |
+| **API Layer** | Interface for all system interactions | Seamless integration with existing tools |
+| **RAG System** | Context-aware document retrieval | Intelligent, compliance-driven responses |
+| **Ollama LLM** | German language AI generation | Professional, accurate content creation |
+| **Analysis Engine** | Real-time project health monitoring | Proactive risk identification and management |
+| **OpenProject** | Live project data source | Real-time insights and accurate reporting |
+
+---
+
 ## Core Capabilities & Value Drivers
 
 ### 1. **Automated Status Reporting System**
