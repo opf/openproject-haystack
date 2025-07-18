@@ -1,9 +1,12 @@
 """Report templates for project status report generation."""
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from src.models.schemas import WorkPackage
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectReportAnalyzer:
@@ -19,11 +22,15 @@ class ProjectReportAnalyzer:
         Returns:
             Dictionary containing analysis results
         """
+        logger.info(f"Starting analysis of {len(work_packages)} work packages")
+        
         if not work_packages:
+            logger.info("No work packages to analyze, returning empty results")
             return {
                 "total_count": 0,
                 "status_distribution": {},
                 "priority_distribution": {},
+                "type_distribution": {},
                 "completion_stats": {},
                 "assignee_workload": {},
                 "timeline_insights": {},
@@ -32,18 +39,75 @@ class ProjectReportAnalyzer:
         
         # Basic counts
         total_count = len(work_packages)
+        logger.info(f"Analyzing {total_count} work packages for status distribution")
         
-        # Status distribution
+        # Status distribution with enhanced handling and detailed logging
         status_distribution = {}
-        for wp in work_packages:
-            status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
+        status_issues = []
+        
+        for i, wp in enumerate(work_packages, 1):
+            logger.info(f"[{i}/{total_count}] Analyzing work package {wp.id}: '{wp.subject}'")
+            
+            # Log the complete work package status information
+            logger.debug(f"WP {wp.id} raw status data: {wp.status}")
+            
+            if wp.status and isinstance(wp.status, dict):
+                status_name = wp.status.get("name")
+                status_id = wp.status.get("id")
+                
+                logger.info(f"WP {wp.id} has status object - ID: {status_id}, Name: '{status_name}'")
+                
+                if status_name:
+                    # Status name should already be normalized by the OpenProject client
+                    status_name = status_name.strip()
+                    if not status_name:
+                        status_name = "Empty Status"
+                        status_issues.append(f"WP {wp.id}: Empty status name")
+                        logger.warning(f"WP {wp.id} '{wp.subject}' has empty status name after stripping")
+                    else:
+                        logger.info(f"WP {wp.id} '{wp.subject}' has valid status: '{status_name}'")
+                else:
+                    status_name = "Missing Status Name"
+                    status_issues.append(f"WP {wp.id}: Status object exists but no name field")
+                    logger.warning(f"WP {wp.id} '{wp.subject}' has status object but no name field")
+            else:
+                status_name = "No Status Object"
+                status_issues.append(f"WP {wp.id}: No status object in work package data")
+                logger.warning(f"WP {wp.id} '{wp.subject}' has no status object - wp.status: {wp.status}")
+            
+            # Log the final status categorization
+            logger.info(f"WP {wp.id} '{wp.subject}' categorized as: '{status_name}'")
+            
             status_distribution[status_name] = status_distribution.get(status_name, 0) + 1
+        
+        # Log comprehensive status analysis results
+        logger.info("Status distribution analysis completed:")
+        for status, count in status_distribution.items():
+            logger.info(f"  - '{status}': {count} work packages")
+        
+        # Log status issues for debugging
+        if status_issues:
+            logger.warning(f"Found {len(status_issues)} status issues:")
+            for issue in status_issues:
+                logger.warning(f"  - {issue}")
+        else:
+            logger.info("No status issues found - all work packages have valid status information")
         
         # Priority distribution
         priority_distribution = {}
         for wp in work_packages:
             priority_name = wp.priority.get("name", "No Priority") if wp.priority else "No Priority"
             priority_distribution[priority_name] = priority_distribution.get(priority_name, 0) + 1
+        
+        # Type distribution
+        type_distribution = {}
+        for wp in work_packages:
+            type_name = wp.type.get("name", "No Type") if wp.type else "No Type"
+            type_distribution[type_name] = type_distribution.get(type_name, 0) + 1
+        
+        logger.info("Type distribution analysis completed:")
+        for type_name, count in type_distribution.items():
+            logger.info(f"  - '{type_name}': {count} work packages")
         
         # Completion statistics
         completion_ratios = [wp.done_ratio for wp in work_packages if wp.done_ratio is not None]
@@ -104,10 +168,499 @@ class ProjectReportAnalyzer:
             "total_count": total_count,
             "status_distribution": status_distribution,
             "priority_distribution": priority_distribution,
+            "type_distribution": type_distribution,
             "completion_stats": completion_stats,
             "assignee_workload": assignee_workload,
             "timeline_insights": timeline_insights,
             "key_metrics": key_metrics
+        }
+
+
+class ProjectManagementAnalyzer:
+    """Analyzer that implements the 10 automated project management checks."""
+    
+    def __init__(self):
+        """Initialize the analyzer."""
+        self.checks_performed = 0
+    
+    async def perform_all_checks(
+        self,
+        work_packages: List[WorkPackage],
+        relations: List[Dict[str, Any]] = None,
+        time_entries: List[Dict[str, Any]] = None,
+        users: List[Dict[str, Any]] = None,
+        journals_data: Dict[int, List[Dict[str, Any]]] = None,
+        attachments_data: Dict[int, List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """Perform all 10 automated checks and return results.
+        
+        Args:
+            work_packages: List of work packages
+            relations: List of work package relations
+            time_entries: List of time entries
+            users: List of users
+            journals_data: Dictionary mapping work package ID to journals
+            attachments_data: Dictionary mapping work package ID to attachments
+            
+        Returns:
+            Dictionary containing all check results
+        """
+        logger.info("Performing all 10 project management checks")
+        
+        results = {}
+        self.checks_performed = 0
+        
+        # 1. Deadline Health
+        results["deadline_health"] = self._check_deadline_health(work_packages)
+        self.checks_performed += 1
+        
+        # 2. Missing Dates
+        results["missing_dates"] = self._check_missing_dates(work_packages)
+        self.checks_performed += 1
+        
+        # 3. Progress vs Plan Drift
+        results["progress_drift"] = self._check_progress_drift(work_packages)
+        self.checks_performed += 1
+        
+        # 4. Resource Load Balance
+        results["resource_balance"] = self._check_resource_balance(work_packages, users or [])
+        self.checks_performed += 1
+        
+        # 5. Dependency Conflicts
+        results["dependency_conflicts"] = self._check_dependency_conflicts(work_packages, relations or [])
+        self.checks_performed += 1
+        
+        # 6. Budget vs Actuals
+        results["budget_actuals"] = self._check_budget_actuals(work_packages, time_entries or [])
+        self.checks_performed += 1
+        
+        # 7. Unaddressed Risks & Issues
+        results["risks_issues"] = self._check_risks_issues(work_packages)
+        self.checks_performed += 1
+        
+        # 8. Stakeholder Responsiveness
+        results["stakeholder_responsiveness"] = self._check_stakeholder_responsiveness(work_packages, journals_data or {})
+        self.checks_performed += 1
+        
+        # 9. Scope Creep Monitor
+        results["scope_creep"] = self._check_scope_creep(work_packages)
+        self.checks_performed += 1
+        
+        # 10. Documentation Completeness
+        results["documentation_completeness"] = self._check_documentation_completeness(work_packages, attachments_data or {})
+        self.checks_performed += 1
+        
+        logger.info(f"Completed {self.checks_performed} project management checks")
+        return results
+    
+    def _check_deadline_health(self, work_packages: List[WorkPackage]) -> Dict[str, Any]:
+        """Check 1: Deadline Health - Flags overdue work packages."""
+        now = datetime.now(timezone.utc)
+        overdue_items = []
+        upcoming_deadlines = []
+        
+        for wp in work_packages:
+            if wp.due_date and wp.done_ratio != 100:
+                try:
+                    due_date = datetime.fromisoformat(wp.due_date.replace('Z', '+00:00'))
+                    if due_date < now:
+                        overdue_items.append({
+                            "id": wp.id,
+                            "subject": wp.subject,
+                            "due_date": wp.due_date,
+                            "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
+                            "days_overdue": (now - due_date).days
+                        })
+                    elif due_date <= now + timedelta(days=7):
+                        upcoming_deadlines.append({
+                            "id": wp.id,
+                            "subject": wp.subject,
+                            "due_date": wp.due_date,
+                            "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
+                            "days_until_due": (due_date - now).days
+                        })
+                except (ValueError, TypeError):
+                    continue
+        
+        return {
+            "overdue_count": len(overdue_items),
+            "overdue_items": overdue_items,
+            "upcoming_deadlines_count": len(upcoming_deadlines),
+            "upcoming_deadlines": upcoming_deadlines,
+            "severity": "critical" if len(overdue_items) > 0 else "warning" if len(upcoming_deadlines) > 0 else "ok"
+        }
+    
+    def _check_missing_dates(self, work_packages: List[WorkPackage]) -> Dict[str, Any]:
+        """Check 2: Missing Dates - Lists items without start/due dates."""
+        missing_dates = []
+        
+        for wp in work_packages:
+            issues = []
+            if not wp.due_date:
+                issues.append("missing_due_date")
+            # Note: OpenProject API doesn't always expose startDate in basic work package data
+            # This would need to be enhanced if start dates are available
+            
+            if issues:
+                missing_dates.append({
+                    "id": wp.id,
+                    "subject": wp.subject,
+                    "type": wp.status.get("name") if wp.status else "Unknown",
+                    "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
+                    "issues": issues
+                })
+        
+        return {
+            "missing_dates_count": len(missing_dates),
+            "missing_dates_items": missing_dates,
+            "severity": "warning" if len(missing_dates) > 0 else "ok"
+        }
+    
+    def _check_progress_drift(self, work_packages: List[WorkPackage]) -> Dict[str, Any]:
+        """Check 3: Progress vs Plan Drift - Compares actual vs planned progress."""
+        drift_items = []
+        total_packages = len(work_packages)
+        
+        if total_packages == 0:
+            return {"drift_count": 0, "drift_items": [], "severity": "ok"}
+        
+        # Calculate expected progress based on time elapsed
+        now = datetime.now(timezone.utc)
+        
+        for wp in work_packages:
+            if wp.due_date and wp.created_at:
+                try:
+                    created_date = datetime.fromisoformat(wp.created_at.replace('Z', '+00:00'))
+                    due_date = datetime.fromisoformat(wp.due_date.replace('Z', '+00:00'))
+                    
+                    total_duration = (due_date - created_date).total_seconds()
+                    elapsed_duration = (now - created_date).total_seconds()
+                    
+                    if total_duration > 0:
+                        expected_progress = min(100, (elapsed_duration / total_duration) * 100)
+                        actual_progress = wp.done_ratio or 0
+                        drift = expected_progress - actual_progress
+                        
+                        if drift > 20:  # More than 20% behind expected progress
+                            drift_items.append({
+                                "id": wp.id,
+                                "subject": wp.subject,
+                                "expected_progress": round(expected_progress, 1),
+                                "actual_progress": actual_progress,
+                                "drift_percentage": round(drift, 1),
+                                "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned"
+                            })
+                except (ValueError, TypeError):
+                    continue
+        
+        return {
+            "drift_count": len(drift_items),
+            "drift_items": drift_items,
+            "severity": "critical" if len(drift_items) > total_packages * 0.3 else "warning" if len(drift_items) > 0 else "ok"
+        }
+    
+    def _check_resource_balance(self, work_packages: List[WorkPackage], users: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Check 4: Resource Load Balance - Checks user workload distribution."""
+        user_workload = {}
+        unassigned_count = 0
+        
+        for wp in work_packages:
+            if wp.assignee:
+                user_id = wp.assignee.get("id")
+                user_name = wp.assignee.get("name")
+                
+                if user_id not in user_workload:
+                    user_workload[user_id] = {
+                        "name": user_name,
+                        "total_tasks": 0,
+                        "completed_tasks": 0,
+                        "in_progress_tasks": 0,
+                        "overdue_tasks": 0
+                    }
+                
+                user_workload[user_id]["total_tasks"] += 1
+                
+                if wp.done_ratio == 100:
+                    user_workload[user_id]["completed_tasks"] += 1
+                elif wp.done_ratio and wp.done_ratio > 0:
+                    user_workload[user_id]["in_progress_tasks"] += 1
+                
+                # Check if overdue
+                if wp.due_date and wp.done_ratio != 100:
+                    try:
+                        due_date = datetime.fromisoformat(wp.due_date.replace('Z', '+00:00'))
+                        if due_date < datetime.now(timezone.utc):
+                            user_workload[user_id]["overdue_tasks"] += 1
+                    except (ValueError, TypeError):
+                        pass
+            else:
+                unassigned_count += 1
+        
+        # Identify overloaded users (more than 10 active tasks)
+        overloaded_users = []
+        for user_id, workload in user_workload.items():
+            active_tasks = workload["total_tasks"] - workload["completed_tasks"]
+            if active_tasks > 10:
+                overloaded_users.append({
+                    "user_id": user_id,
+                    "name": workload["name"],
+                    "active_tasks": active_tasks,
+                    "overdue_tasks": workload["overdue_tasks"]
+                })
+        
+        return {
+            "user_workload": user_workload,
+            "unassigned_count": unassigned_count,
+            "overloaded_users": overloaded_users,
+            "severity": "warning" if len(overloaded_users) > 0 or unassigned_count > 5 else "ok"
+        }
+    
+    def _check_dependency_conflicts(self, work_packages: List[WorkPackage], relations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Check 5: Dependency Conflicts - Looks for relation conflicts."""
+        conflicts = []
+        
+        # Create a map of work packages for quick lookup
+        wp_map = {wp.id: wp for wp in work_packages}
+        
+        for relation in relations:
+            try:
+                relation_type = relation.get("type")
+                from_id = relation.get("from", {}).get("id") if relation.get("from") else None
+                to_id = relation.get("to", {}).get("id") if relation.get("to") else None
+                
+                if not from_id or not to_id or relation_type != "precedes":
+                    continue
+                
+                from_wp = wp_map.get(from_id)
+                to_wp = wp_map.get(to_id)
+                
+                if not from_wp or not to_wp:
+                    continue
+                
+                # Check if follower starts before predecessor finishes
+                if from_wp.due_date and to_wp.created_at:
+                    try:
+                        from_due = datetime.fromisoformat(from_wp.due_date.replace('Z', '+00:00'))
+                        to_start = datetime.fromisoformat(to_wp.created_at.replace('Z', '+00:00'))
+                        
+                        if to_start < from_due and from_wp.done_ratio != 100:
+                            conflicts.append({
+                                "predecessor_id": from_id,
+                                "predecessor_subject": from_wp.subject,
+                                "follower_id": to_id,
+                                "follower_subject": to_wp.subject,
+                                "conflict_type": "start_before_predecessor_finish"
+                            })
+                    except (ValueError, TypeError):
+                        continue
+                        
+            except Exception as e:
+                logger.warning(f"Error processing relation: {e}")
+                continue
+        
+        return {
+            "conflicts_count": len(conflicts),
+            "conflicts": conflicts,
+            "severity": "critical" if len(conflicts) > 0 else "ok"
+        }
+    
+    def _check_budget_actuals(self, work_packages: List[WorkPackage], time_entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Check 6: Budget vs Actuals - Compares spent vs estimated time."""
+        budget_issues = []
+        total_estimated = 0
+        total_spent = 0
+        
+        # Calculate spent time per work package
+        spent_by_wp = {}
+        for entry in time_entries:
+            wp_id = entry.get("workPackage", {}).get("id") if entry.get("workPackage") else None
+            hours = entry.get("hours", 0)
+            
+            if wp_id:
+                spent_by_wp[wp_id] = spent_by_wp.get(wp_id, 0) + hours
+        
+        for wp in work_packages:
+            estimated_time = wp.done_ratio  # This would need to be enhanced with actual estimated time field
+            spent_time = spent_by_wp.get(wp.id, 0)
+            
+            if estimated_time and spent_time > estimated_time * 1.2:  # 20% over budget
+                budget_issues.append({
+                    "id": wp.id,
+                    "subject": wp.subject,
+                    "estimated_hours": estimated_time,
+                    "spent_hours": spent_time,
+                    "over_budget_percentage": round(((spent_time - estimated_time) / estimated_time) * 100, 1),
+                    "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned"
+                })
+            
+            total_estimated += estimated_time or 0
+            total_spent += spent_time
+        
+        return {
+            "budget_issues_count": len(budget_issues),
+            "budget_issues": budget_issues,
+            "total_estimated_hours": total_estimated,
+            "total_spent_hours": total_spent,
+            "overall_budget_status": "over" if total_spent > total_estimated * 1.1 else "on_track",
+            "severity": "critical" if len(budget_issues) > 0 else "ok"
+        }
+    
+    def _check_risks_issues(self, work_packages: List[WorkPackage]) -> Dict[str, Any]:
+        """Check 7: Unaddressed Risks & Issues - Finds open risks/bugs past due date."""
+        unaddressed_items = []
+        
+        for wp in work_packages:
+            # Check both type and status for risk/issue identification
+            wp_type = wp.type.get("name", "").lower() if wp.type else ""
+            wp_status = wp.status.get("name", "").lower() if wp.status else ""
+            
+            # Check if it's a risk or bug type work package (prioritize type field)
+            type_keywords = ["risk", "bug", "issue", "problem", "defect", "incident", "vulnerability"]
+            is_risk_or_issue = (
+                any(keyword in wp_type for keyword in type_keywords) or
+                any(keyword in wp_status for keyword in type_keywords)
+            )
+            
+            if is_risk_or_issue:
+                # Check if it's still open and past due date
+                if wp.done_ratio != 100:
+                    is_overdue = False
+                    if wp.due_date:
+                        try:
+                            due_date = datetime.fromisoformat(wp.due_date.replace('Z', '+00:00'))
+                            is_overdue = due_date < datetime.now(timezone.utc)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Include if overdue or has no assignee
+                    if is_overdue or not wp.assignee:
+                        unaddressed_items.append({
+                            "id": wp.id,
+                            "subject": wp.subject,
+                            "type": wp_type if wp_type else wp_status,
+                            "due_date": wp.due_date,
+                            "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
+                            "issue_type": "overdue" if is_overdue else "no_assignee"
+                        })
+        
+        return {
+            "unaddressed_count": len(unaddressed_items),
+            "unaddressed_items": unaddressed_items,
+            "severity": "critical" if len(unaddressed_items) > 0 else "ok"
+        }
+    
+    def _check_stakeholder_responsiveness(self, work_packages: List[WorkPackage], journals_data: Dict[int, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """Check 8: Stakeholder Responsiveness - Highlights stale discussions."""
+        stale_discussions = []
+        threshold_days = 7
+        now = datetime.now(timezone.utc)
+        
+        for wp in work_packages:
+            journals = journals_data.get(wp.id, [])
+            
+            if journals:
+                # Find the most recent journal entry
+                latest_activity = None
+                for journal in journals:
+                    try:
+                        created_at = datetime.fromisoformat(journal.get("createdAt", "").replace('Z', '+00:00'))
+                        if not latest_activity or created_at > latest_activity:
+                            latest_activity = created_at
+                    except (ValueError, TypeError):
+                        continue
+                
+                if latest_activity:
+                    days_since_activity = (now - latest_activity).days
+                    if days_since_activity > threshold_days and wp.done_ratio != 100:
+                        stale_discussions.append({
+                            "id": wp.id,
+                            "subject": wp.subject,
+                            "last_activity": latest_activity.isoformat(),
+                            "days_since_activity": days_since_activity,
+                            "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned"
+                        })
+            else:
+                # No activity at all - also concerning for active work packages
+                if wp.done_ratio != 100:
+                    stale_discussions.append({
+                        "id": wp.id,
+                        "subject": wp.subject,
+                        "last_activity": None,
+                        "days_since_activity": None,
+                        "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned"
+                    })
+        
+        return {
+            "stale_count": len(stale_discussions),
+            "stale_discussions": stale_discussions,
+            "severity": "warning" if len(stale_discussions) > 0 else "ok"
+        }
+    
+    def _check_scope_creep(self, work_packages: List[WorkPackage]) -> Dict[str, Any]:
+        """Check 9: Scope Creep Monitor - Detects increases in estimated effort."""
+        scope_creep_items = []
+        recent_additions = []
+        
+        # Check for recently created work packages (potential scope creep)
+        now = datetime.now(timezone.utc)
+        baseline_date = now - timedelta(days=30)  # Consider last 30 days as recent
+        
+        for wp in work_packages:
+            try:
+                created_date = datetime.fromisoformat(wp.created_at.replace('Z', '+00:00'))
+                if created_date > baseline_date:
+                    recent_additions.append({
+                        "id": wp.id,
+                        "subject": wp.subject,
+                        "created_date": wp.created_at,
+                        "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned"
+                    })
+            except (ValueError, TypeError):
+                continue
+        
+        # Note: Detecting actual scope creep would require historical data
+        # This is a simplified version that flags recent additions
+        
+        return {
+            "recent_additions_count": len(recent_additions),
+            "recent_additions": recent_additions,
+            "scope_creep_items": scope_creep_items,
+            "severity": "warning" if len(recent_additions) > 5 else "ok"
+        }
+    
+    def _check_documentation_completeness(self, work_packages: List[WorkPackage], attachments_data: Dict[int, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """Check 10: Documentation Completeness - Lists tasks lacking description or attachments."""
+        incomplete_docs = []
+        
+        for wp in work_packages:
+            issues = []
+            
+            # Check for missing or empty description
+            if not wp.description or not wp.description.get("raw", "").strip():
+                issues.append("missing_description")
+            
+            # Check for missing attachments (for certain types of work packages)
+            attachments = attachments_data.get(wp.id, [])
+            if len(attachments) == 0:
+                # Only flag as issue for certain types that typically need attachments
+                wp_type = wp.status.get("name", "").lower() if wp.status else ""
+                if any(keyword in wp_type for keyword in ["design", "specification", "requirement", "documentation"]):
+                    issues.append("missing_attachments")
+            
+            if issues:
+                incomplete_docs.append({
+                    "id": wp.id,
+                    "subject": wp.subject,
+                    "type": wp.status.get("name") if wp.status else "Unknown",
+                    "assignee": wp.assignee.get("name") if wp.assignee else "Unassigned",
+                    "issues": issues,
+                    "attachments_count": len(attachments)
+                })
+        
+        return {
+            "incomplete_count": len(incomplete_docs),
+            "incomplete_items": incomplete_docs,
+            "severity": "warning" if len(incomplete_docs) > 0 else "ok"
         }
 
 
@@ -122,55 +675,59 @@ class ProjectStatusReportTemplate:
             Template string for LLM prompt
         """
         return """
-You are a project management expert tasked with generating a comprehensive project status report based on work package data from OpenProject.
+Sie sind ein Experte für Projektmanagement und erstellen einen umfassenden Projektstatusbericht basierend auf Arbeitspaket-Daten aus OpenProject.
 
-Based on the following project data and analysis, generate a professional project status report:
+**WICHTIG: Erwähnen Sie NICHT die Projekt-ID im Berichtstext, da der Benutzer bereits weiß, in welchem Projekt er sich befindet. Beginnen Sie den Bericht direkt mit einer Statusübersicht, ohne auf die Projekt-ID zu verweisen.**
 
-PROJECT INFORMATION:
-- Project ID: {project_id}
+Basierend auf den folgenden Projektdaten und Analysen, erstellen Sie einen professionellen Projektstatusbericht:
+
+PROJEKTINFORMATIONEN (nur zur Kontextualisierung, nicht im Bericht erwähnen):
+- Projekt-ID: {project_id}
 - OpenProject URL: {openproject_base_url}
-- Report Generated: {generated_at}
-- Total Work Packages Analyzed: {total_work_packages}
+- Bericht erstellt: {generated_at}
+- Analysierte Arbeitspakete gesamt: {total_work_packages}
 
-WORK PACKAGE ANALYSIS:
+ARBEITSPAKET-ANALYSE:
 {analysis_data}
 
-WORK PACKAGE DETAILS:
+ARBEITSPAKET-DETAILS:
 {work_packages_summary}
 
-Please generate a comprehensive project status report that includes:
+Bitte erstellen Sie einen umfassenden Projektstatusbericht, der folgende Punkte enthält:
 
-1. **Executive Summary**
-   - Overall project health assessment
-   - Key achievements and progress highlights
-   - Critical issues or risks identified
+1. **Zusammenfassung**
+   - Gesamtbewertung der Projektgesundheit
+   - Wichtige Erfolge und Fortschrittshighlights
+   - Kritische Probleme oder identifizierte Risiken
 
-2. **Work Package Statistics**
-   - Total work packages and their distribution by status
-   - Completion rate and progress metrics
-   - Priority breakdown and focus areas
+2. **Arbeitspaket-Statistiken**
+   - Gesamtzahl der Arbeitspakete und deren Verteilung nach Status
+   - Fertigstellungsgrad und Fortschrittsmetriken
+   - Prioritätsaufschlüsselung und Schwerpunktbereiche
 
-3. **Team Performance**
-   - Workload distribution among team members
-   - Individual and team productivity insights
-   - Resource allocation observations
+3. **Teamleistung**
+   - Arbeitsbelastungsverteilung unter den Teammitgliedern
+   - Individuelle und Team-Produktivitätseinblicke
+   - Beobachtungen zur Ressourcenzuteilung
 
-4. **Timeline and Deadlines**
-   - Overdue items and their impact
-   - Upcoming deadlines and priorities
-   - Schedule adherence assessment
+4. **Zeitplan und Fristen**
+   - Überfällige Punkte und deren Auswirkungen
+   - Anstehende Fristen und Prioritäten
+   - Bewertung der Termintreue
 
-5. **Recommendations**
-   - Actionable steps to improve project health
-   - Risk mitigation strategies
-   - Resource reallocation suggestions if needed
+5. **Empfehlungen**
+   - Umsetzbare Schritte zur Verbesserung der Projektgesundheit
+   - Risikominderungsstrategien
+   - Vorschläge zur Ressourcenumverteilung falls erforderlich
 
-6. **Next Steps**
-   - Immediate actions required
-   - Medium-term planning considerations
-   - Success metrics to monitor
+6. **Nächste Schritte**
+   - Sofort erforderliche Maßnahmen
+   - Mittelfristige Planungsüberlegungen
+   - Zu überwachende Erfolgsmetriken
 
-Format the report in a professional, clear, and actionable manner. Use bullet points and structured sections for easy readability. Focus on insights that would be valuable for project managers and stakeholders.
+Formatieren Sie den Bericht professionell, klar und umsetzbar. Verwenden Sie Aufzählungspunkte und strukturierte Abschnitte für eine einfache Lesbarkeit. Konzentrieren Sie sich auf Erkenntnisse, die für Projektmanager und Stakeholder wertvoll wären.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
 """
     
     @staticmethod
@@ -203,13 +760,14 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
         
         for i, wp in enumerate(sorted_packages[:limit], 1):
             status_name = wp.status.get("name", "Unknown") if wp.status else "Unknown"
+            type_name = wp.type.get("name", "Unknown") if wp.type else "Unknown"
             priority_name = wp.priority.get("name", "Normal") if wp.priority else "Normal"
             assignee_name = wp.assignee.get("name", "Unassigned") if wp.assignee else "Unassigned"
             completion = wp.done_ratio if wp.done_ratio is not None else 0
             
             summary_lines.append(
                 f"{i}. [{wp.id}] {wp.subject}\n"
-                f"   Status: {status_name} | Priority: {priority_name} | "
+                f"   Type: {type_name} | Status: {status_name} | Priority: {priority_name} | "
                 f"Assignee: {assignee_name} | Progress: {completion}%"
             )
             
@@ -305,81 +863,83 @@ Format the report in a professional, clear, and actionable manner. Use bullet po
             Template string for LLM prompt with RAG enhancement
         """
         return """
-You are a project management expert specializing in the PMFlex methodology used by the German federal government. You are tasked with generating a comprehensive project status report (Projektstatusbericht) based on work package data from OpenProject, following the official German PMFlex template structure.
+Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik der deutschen Bundesverwaltung. Ihre Aufgabe ist es, einen umfassenden Projektstatusbericht (Projektstatusbericht) basierend auf Arbeitspaket-Daten aus OpenProject zu erstellen und dabei die offizielle deutsche PMFlex-Vorlage zu befolgen.
 
-PROJECT INFORMATION:
-- Project ID: {project_id}
-- Project Type: {project_type}
+**WICHTIG: Erwähnen Sie NICHT die Projekt-ID im Berichtstext, da der Benutzer bereits weiß, in welchem Projekt er sich befindet. Beginnen Sie den Bericht direkt mit dem aktuellen Projektstatus, ohne auf die Projekt-ID zu verweisen.**
+
+PROJEKTINFORMATIONEN (nur zur Kontextualisierung, nicht im Bericht erwähnen):
+- Projekt-ID: {project_id}
+- Projekttyp: {project_type}
 - OpenProject URL: {openproject_base_url}
-- Report Generated: {generated_at}
-- Total Work Packages Analyzed: {total_work_packages}
+- Bericht erstellt: {generated_at}
+- Analysierte Arbeitspakete gesamt: {total_work_packages}
 
-WORK PACKAGE ANALYSIS:
+ARBEITSPAKET-ANALYSE:
 {analysis_data}
 
-WORK PACKAGE DETAILS:
+ARBEITSPAKET-DETAILS:
 {work_packages_summary}
 
-PMFLEX CONTEXT AND TEMPLATES:
+PMFLEX-KONTEXT UND VORLAGEN:
 {pmflex_context}
 
-Based on the project data, analysis, and PMFlex methodology context above, generate a project status report (Projektstatusbericht) that follows the official German PMFlex template structure:
+Basierend auf den Projektdaten, der Analyse und dem PMFlex-Methodikkontext oben, erstellen Sie einen Projektstatusbericht (Projektstatusbericht), der der offiziellen deutschen PMFlex-Vorlage folgt und genau in dieser Reihenfolge erstellt wird:
 
-## REPORT STRUCTURE (Generate in this exact order):
+### 1. **Zusammenfassung**
+Beginnen Sie mit einem umfassenden Zusammenfassungsabsatz, der Folgendes enthält:
+- Direkte Beschreibung des aktuellen Projektstatus (ohne Erwähnung der Projekt-ID)
+- Gesamtbewertung der Projektgesundheit nach PMFlex-Kriterien
+- Wichtige Erfolge und Fortschrittshighlights aus der Berichtsperiode
+- Kritische Probleme oder Risiken, die Aufmerksamkeit erfordern
+- Gesamtentwicklung und Ausblick für das Projekt
 
-### 1. **ZUSAMMENFASSUNG (Summary)**
-Start with a comprehensive summary paragraph that provides:
-- Brief description of the current project status (Kurze Beschreibung des aktuellen Status des Projekts)
-- Overall project health assessment according to PMFlex criteria
-- Key achievements and progress highlights from the reporting period
-- Critical issues or risks that require attention
-- Overall trajectory and outlook for the project
+### 2. **Statusübersicht**
+Geben Sie eine Statusbewertung mit dem PMFlex-Ampelsystem an:
+- **Gesamtstatus**: Bewerten Sie als "Im Plan" (Grün), "Teilweise kritisch" (Gelb) oder "Kritisch" (Rot)
+- **Zeit (Zeitplan)**: Bewertung der Termintreue
+- **Kosten**: Budget- und Kostenstatus (falls aus Arbeitspaket-Daten verfügbar)
+- **Risiko**: Risikobewertung basierend auf der Arbeitspaket-Analyse
 
-### 2. **STATUSÜBERSICHT (Status Overview)**
-Provide a status assessment using the PMFlex traffic light system:
-- **Gesamtstatus (Overall Status)**: Assess as "Im Plan" (Green), "Teilweise kritisch" (Yellow), or "Kritisch" (Red)
-- **Zeit (Time/Schedule)**: Schedule adherence assessment
-- **Kosten (Costs)**: Budget and cost status (if available from work package data)
-- **Risiko (Risk)**: Risk level assessment based on work package analysis
+Geben Sie die Berichtsperiode basierend auf dem Zeitrahmen der Arbeitspaket-Daten an.
 
-Include the reporting period (Berichtsperiode) based on the work package data timeframe.
+### 3. **Abgeschlossene Aktivitäten und Meilensteine**
+Listen Sie abgeschlossene Arbeitspakete und Erfolge auf:
+- Arbeitspakete, die während der Berichtsperiode abgeschlossen wurden (mit Fertigstellungsgrad = 100%)
+- Erreichte wichtige Meilensteine
+- Abgeschlossene bedeutende Liefergegenstände
+- Durchlaufene Qualitätstore
+- Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Titeln, wo verfügbar
 
-### 3. **ABGESCHLOSSENE AKTIVITÄTEN UND MEILENSTEINE (Completed Activities and Milestones)**
-List completed work packages and achievements:
-- Work packages completed during the reporting period (with completion percentage = 100%)
-- Key milestones reached
-- Significant deliverables completed
-- Quality gates passed
-- Use bullet points with specific work package IDs and titles where available
+### 4. **Nächste Aktivitäten und Meilensteine**
+Skizzieren Sie anstehende Arbeiten und Prioritäten:
+- Arbeitspakete, die für die nächste Periode geplant sind
+- Anstehende Meilensteine und Fristen
+- Aktivitäten auf dem kritischen Pfad
+- Abhängigkeiten, die Aufmerksamkeit benötigen
+- Ressourcenanforderungen für anstehende Aktivitäten
+- Verwenden Sie Aufzählungspunkte mit spezifischen Arbeitspaket-IDs und Fälligkeitsterminen, wo verfügbar
 
-### 4. **NÄCHSTE AKTIVITÄTEN UND MEILENSTEINE (Next Activities and Milestones)**
-Outline upcoming work and priorities:
-- Work packages scheduled for the next period
-- Upcoming milestones and deadlines
-- Critical path activities
-- Dependencies that need attention
-- Resource requirements for upcoming activities
-- Use bullet points with specific work package IDs and due dates where available
+### 5. **Entscheidungsbedarf**
+Identifizieren Sie Probleme, die Entscheidungen oder Eskalation erfordern:
+- Blockierte Arbeitspakete, die Management-Intervention benötigen
+- Ressourcenkonflikte oder Kapazitätsprobleme
+- Umfangsänderungen oder Anforderungsklärungen erforderlich
+- Risikominderungsentscheidungen erforderlich
+- Budget- oder Zeitplananpassungen erforderlich
+- Ausstehende Stakeholder-Entscheidungen
+- Verwenden Sie Aufzählungspunkte mit klaren Handlungspunkten und verantwortlichen Parteien
 
-### 5. **ENTSCHEIDUNGSBEDARF (Decision Requirements)**
-Identify issues requiring decisions or escalation:
-- Blocked work packages requiring management intervention
-- Resource conflicts or capacity issues
-- Scope changes or requirement clarifications needed
-- Risk mitigation decisions required
-- Budget or timeline adjustments needed
-- Stakeholder decisions pending
-- Use bullet points with clear action items and responsible parties
+## Formatierungsanforderungen:
+- Verwenden Sie durchgehend deutsche PMFlex-Terminologie
+- Strukturieren Sie mit klaren Überschriften und Aufzählungspunkten
+- Beziehen Sie spezifische Arbeitspaket-Referenzen ein, wo relevant
+- Behalten Sie einen professionellen Ton bei, der für deutsche Bundesverwaltungsstandards geeignet ist
+- Konzentrieren Sie sich auf umsetzbare Erkenntnisse und klare Statuskommunikation
+- Stellen Sie die Einhaltung der PMFlex-Dokumentationsstandards sicher
 
-## FORMATTING REQUIREMENTS:
-- Use German PMFlex terminology throughout
-- Structure with clear headings and bullet points
-- Include specific work package references where relevant
-- Maintain professional tone suitable for German federal government standards
-- Focus on actionable insights and clear status communication
-- Ensure compliance with PMFlex documentation standards
+Der Bericht sollte PMFlex-Prinzipien der Transparenz, Verantwortlichkeit und des systematischen Projektmanagement-Ansatzes widerspiegeln, der in der deutschen Bundesverwaltung verwendet wird. Priorisieren Sie Klarheit und umsetzbare Informationen für Projekt-Stakeholder und Governance-Gremien.
 
-The report should reflect PMFlex principles of transparency, accountability, and systematic project management approach used in German federal administration. Prioritize clarity and actionable information for project stakeholders and governance bodies.
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche PMFlex-Terminologie und -Standards. Der gesamte Bericht muss in deutscher Sprache verfasst werden.**
 """
     
     @staticmethod
@@ -413,41 +973,342 @@ The report should reflect PMFlex principles of transparency, accountability, and
     def _get_executive_template() -> str:
         """Executive-focused template with high-level insights."""
         return """
-Generate an executive-level project status report focusing on high-level insights and strategic decisions.
+Erstellen Sie einen Projektstatusbericht auf Führungsebene mit Fokus auf strategische Erkenntnisse und Entscheidungen.
 
-PROJECT DATA:
-- Project ID: {project_id}
-- Total Work Packages: {total_work_packages}
-- Analysis: {analysis_data}
+PROJEKTDATEN:
+- Projekt-ID: {project_id}
+- Arbeitspakete gesamt: {total_work_packages}
+- Analyse: {analysis_data}
 
-Focus on:
-1. Strategic project health assessment
-2. Key performance indicators
-3. Resource allocation efficiency
-4. Risk assessment and mitigation
-5. Strategic recommendations
+Schwerpunkt auf:
+1. Strategische Projektgesundheitsbewertung
+2. Wichtige Leistungsindikatoren
+3. Effizienz der Ressourcenzuteilung
+4. Risikobewertung und -minderung
+5. Strategische Empfehlungen
 
-Keep the report concise and focused on decision-making insights.
+Halten Sie den Bericht prägnant und fokussiert auf entscheidungsrelevante Erkenntnisse.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
 """
     
     @staticmethod
     def _get_detailed_template() -> str:
         """Detailed template for comprehensive analysis."""
         return """
-Generate a detailed project status report with comprehensive analysis of all aspects.
+Erstellen Sie einen detaillierten Projektstatusbericht mit umfassender Analyse aller Aspekte.
 
-PROJECT DATA:
-- Project ID: {project_id}
-- Analysis: {analysis_data}
-- Work Packages: {work_packages_summary}
+PROJEKTDATEN:
+- Projekt-ID: {project_id}
+- Analyse: {analysis_data}
+- Arbeitspakete: {work_packages_summary}
 
-Include detailed sections on:
-1. Comprehensive work package analysis
-2. Individual team member performance
-3. Detailed timeline analysis
-4. Quality metrics and trends
-5. Detailed risk assessment
-6. Comprehensive recommendations with implementation steps
+Fügen Sie detaillierte Abschnitte ein zu:
+1. Umfassende Arbeitspaket-Analyse
+2. Individuelle Teammitglieder-Leistung
+3. Detaillierte Zeitplan-Analyse
+4. Qualitätsmetriken und Trends
+5. Detaillierte Risikobewertung
+6. Umfassende Empfehlungen mit Umsetzungsschritten
 
-Provide in-depth insights suitable for project managers and team leads.
+Bieten Sie tiefgreifende Erkenntnisse, die für Projektmanager und Teamleiter geeignet sind.
+
+**WICHTIG: Antworten Sie vollständig auf Deutsch und verwenden Sie deutsche Projektmanagement-Terminologie.**
+"""
+
+
+class ProjectManagementHintsTemplate:
+    """Template for generating German project management hints."""
+    
+    @staticmethod
+    def create_hints_prompt(
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        checks_results: Dict[str, Any],
+        pmflex_context: str
+    ) -> str:
+        """Create prompt for generating German project management hints.
+        
+        Args:
+            project_id: Project identifier
+            project_type: Type of project
+            openproject_base_url: Base URL of OpenProject instance
+            checks_results: Results from the 10 automated checks
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Complete formatted prompt string
+        """
+        template = ProjectManagementHintsTemplate.get_hints_template()
+        
+        # Format checks results as JSON for better structure
+        checks_json = json.dumps(checks_results, indent=2, default=str)
+        
+        return template.format(
+            project_id=project_id,
+            project_type=project_type,
+            openproject_base_url=openproject_base_url,
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            checks_results=checks_json,
+            pmflex_context=pmflex_context or "Kein PMFlex-Kontext verfügbar."
+        )
+    
+    @staticmethod
+    def create_simple_hints_prompt(
+        project_id: str,
+        project_type: str,
+        openproject_base_url: str,
+        checks_results: Dict[str, Any],
+        pmflex_context: str
+    ) -> str:
+        """Create a simplified prompt that asks for structured text instead of JSON.
+        
+        Args:
+            project_id: Project identifier
+            project_type: Type of project
+            openproject_base_url: Base URL of OpenProject instance
+            checks_results: Results from the 10 automated checks
+            pmflex_context: PMFlex context from RAG system
+            
+        Returns:
+            Complete formatted prompt string for structured text output
+        """
+        # Prepare check results summary in a more readable format
+        checks_summary = []
+        
+        # Process each check and extract key information
+        for check_name, check_data in checks_results.items():
+            if isinstance(check_data, dict) and check_data.get("severity") in ["critical", "warning"]:
+                if check_name == "deadline_health" and check_data.get("overdue_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['overdue_count']} überfällige Arbeitspakete gefunden"
+                    )
+                elif check_name == "missing_dates" and check_data.get("missing_dates_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['missing_dates_count']} Arbeitspakete ohne Fälligkeitstermine"
+                    )
+                elif check_name == "resource_balance":
+                    if check_data.get("unassigned_count", 0) > 0:
+                        checks_summary.append(
+                            f"- WARNUNG: {check_data['unassigned_count']} nicht zugewiesene Arbeitspakete"
+                        )
+                    if check_data.get("overloaded_users", []):
+                        checks_summary.append(
+                            f"- WARNUNG: {len(check_data['overloaded_users'])} überlastete Teammitglieder"
+                        )
+                elif check_name == "progress_drift" and check_data.get("drift_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['drift_count']} Arbeitspakete hinter dem Zeitplan"
+                    )
+                elif check_name == "risks_issues" and check_data.get("unaddressed_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['unaddressed_count']} unbearbeitete Risiken/Probleme"
+                    )
+                elif check_name == "documentation_completeness" and check_data.get("incomplete_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['incomplete_count']} Arbeitspakete mit unvollständiger Dokumentation"
+                    )
+                elif check_name == "dependency_conflicts" and check_data.get("conflicts_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['conflicts_count']} Abhängigkeitskonflikte"
+                    )
+                elif check_name == "stakeholder_responsiveness" and check_data.get("stale_count", 0) > 0:
+                    checks_summary.append(
+                        f"- WARNUNG: {check_data['stale_count']} Arbeitspakete ohne aktuelle Aktivität"
+                    )
+                elif check_name == "scope_creep" and check_data.get("recent_additions_count", 0) > 5:
+                    checks_summary.append(
+                        f"- INFO: {check_data['recent_additions_count']} neue Arbeitspakete in den letzten 30 Tagen"
+                    )
+                elif check_name == "budget_actuals" and check_data.get("budget_issues_count", 0) > 0:
+                    checks_summary.append(
+                        f"- KRITISCH: {check_data['budget_issues_count']} Arbeitspakete überschreiten das Budget"
+                    )
+        
+        checks_text = "\n".join(checks_summary) if checks_summary else "Keine kritischen Probleme gefunden."
+        
+        return f"""
+Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik. Generieren Sie konkrete Handlungsempfehlungen auf Deutsch basierend auf folgenden Prüfungsergebnissen:
+
+PROJEKT: {project_id} (Typ: {project_type})
+
+PRÜFUNGSERGEBNISSE:
+{checks_text}
+
+ANWEISUNGEN:
+Erstellen Sie eine nummerierte Liste von maximal 5 konkreten Handlungsempfehlungen. Jede Empfehlung sollte diesem Format folgen:
+
+1. [Kurzer Titel]: [Detaillierte Beschreibung mit konkreten Handlungsschritten]
+
+BEISPIEL:
+1. Überfällige Termine bearbeiten: Es gibt 3 überfällige Arbeitspakete. Führen Sie umgehend Gespräche mit den Verantwortlichen und definieren Sie neue realistische Termine. Prüfen Sie, ob die Arbeitspakete aufgeteilt werden müssen.
+
+WICHTIGE REGELN:
+- Beginnen Sie jede Empfehlung mit einer Nummer gefolgt von einem Punkt
+- Titel sollte kurz und prägnant sein (max. 60 Zeichen)
+- Nach dem Titel folgt ein Doppelpunkt und dann die Beschreibung
+- Beschreibung muss konkrete Schritte und Zahlen aus den Prüfungen enthalten
+- Priorisieren Sie kritische vor Warnhinweisen
+- Verwenden Sie deutsche PMFlex-Terminologie
+- Keine zusätzlichen Erklärungen oder Formatierungen
+
+Generieren Sie jetzt die nummerierten Empfehlungen:
+"""
+    
+    @staticmethod
+    def get_hints_template() -> str:
+        """Get the German project management hints template.
+        
+        Returns:
+            Template string for LLM prompt
+        """
+        return """
+Sie sind ein Experte für Projektmanagement mit Spezialisierung auf die PMFlex-Methodik der deutschen Bundesverwaltung. Ihre Aufgabe ist es, basierend auf den Ergebnissen von 10 automatisierten Projektprüfungen konkrete, umsetzbare Hinweise in deutscher Sprache zu generieren.
+
+PROJEKTINFORMATIONEN:
+- Projekt-ID: {project_id}
+- Projekttyp: {project_type}
+- OpenProject URL: {openproject_base_url}
+- Generiert am: {generated_at}
+
+ERGEBNISSE DER 10 AUTOMATISIERTEN PRÜFUNGEN:
+{checks_results}
+
+PMFLEX-KONTEXT UND METHODIK:
+{pmflex_context}
+
+Basierend auf den Prüfungsergebnissen und dem PMFlex-Kontext, generieren Sie konkrete Handlungsempfehlungen (Hinweise) für Projektmanager. Jeder Hinweis soll:
+
+1. **Spezifisch und umsetzbar** sein
+2. **PMFlex-Methodik** berücksichtigen
+3. **Deutsche Bundesverwaltungsstandards** einhalten
+4. **Priorität und Dringlichkeit** widerspiegeln
+
+## HINWEISE-KATEGORIEN:
+
+### KRITISCHE HINWEISE (Sofortiger Handlungsbedarf)
+Für Ergebnisse mit "severity": "critical":
+- Überfällige Arbeitspakete
+- Abhängigkeitskonflikte
+- Budgetüberschreitungen
+- Unbearbeitete Risiken
+
+### WARNHINWEISE (Kurzfristige Aufmerksamkeit erforderlich)
+Für Ergebnisse mit "severity": "warning":
+- Fehlende Termine
+- Ressourcenungleichgewicht
+- Veraltete Diskussionen
+- Unvollständige Dokumentation
+
+### OPTIMIERUNGSHINWEISE (Kontinuierliche Verbesserung)
+Für Ergebnisse mit "severity": "ok" aber Verbesserungspotential:
+- Prozessoptimierungen
+- Präventive Maßnahmen
+- Best-Practice-Empfehlungen
+
+## AUSGABEFORMAT:
+
+Generieren Sie die Hinweise im folgenden JSON-Format:
+
+```json
+{
+  "hints": [
+    {
+      "checked": false,
+      "title": "Überfällige Arbeitspakete priorisieren",
+      "description": "Es wurden X überfällige Arbeitspakete identifiziert. Führen Sie umgehend Gespräche mit den Verantwortlichen und definieren Sie realistische neue Termine. Prüfen Sie, ob Arbeitspakete aufgeteilt werden müssen."
+    },
+    {
+      "checked": false,
+      "title": "Fehlende Fälligkeitstermine ergänzen",
+      "description": "Y Arbeitspakete haben keine Fälligkeitstermine. Planen Sie diese zeitlich ein oder verschieben Sie sie in den Backlog, falls der Zeitpunkt unbekannt ist."
+    }
+  ]
+}
+```
+
+## SPEZIFISCHE ANWEISUNGEN:
+
+1. **Titel**: Kurz und prägnant (max. 60 Zeichen)
+2. **Beschreibung**: Konkrete Handlungsschritte mit Bezug zu den Prüfungsergebnissen
+3. **PMFlex-Terminologie**: Verwenden Sie offizielle PMFlex-Begriffe
+4. **Zahlen einbeziehen**: Referenzieren Sie spezifische Zahlen aus den Prüfungen
+5. **Verantwortlichkeiten**: Nennen Sie, wer handeln sollte
+6. **Zeitrahmen**: Geben Sie Dringlichkeit an (sofort, kurzfristig, mittelfristig)
+
+## PRIORISIERUNG:
+1. Kritische Sicherheits- und Compliance-Probleme
+2. Terminrisiken und überfällige Aufgaben
+3. Ressourcen- und Budgetprobleme
+4. Kommunikations- und Dokumentationslücken
+5. Prozessoptimierungen
+
+Generieren Sie maximal 10 Hinweise, priorisiert nach Wichtigkeit und Dringlichkeit. Die Zusammenfassung soll den Gesamtzustand des Projekts widerspiegeln und die wichtigsten Handlungsfelder benennen.
+
+## KRITISCHE JSON-AUSGABE-ANWEISUNGEN:
+
+**ABSOLUT ERFORDERLICH - BEFOLGEN SIE DIESE REGELN GENAU:**
+
+1. **NUR VOLLSTÄNDIGES JSON**: Antworten Sie ausschließlich mit vollständigem, gültigem JSON
+2. **KEINE ZUSÄTZLICHEN TEXTE**: Absolut keine Erklärungen, Kommentare oder Markdown vor oder nach dem JSON
+3. **VOLLSTÄNDIGE STRUKTUR**: Das JSON MUSS vollständig sein - alle öffnenden Klammern müssen geschlossen werden
+4. **GÜLTIGE SYNTAX**: Verwenden Sie korrekte JSON-Syntax mit geschweiften Klammern und Anführungszeichen
+5. **VOLLSTÄNDIGE GENERIERUNG**: Generieren Sie das JSON bis zum Ende - stoppen Sie NICHT mittendrin
+
+**VERBOTENE AUSGABEN (NIEMALS VERWENDEN):**
+- Unvollständiges JSON wie: `\n  "hints"`
+- JSON ohne öffnende geschweifte Klammer: `"hints": [...]`
+- JSON ohne schließende geschweifte Klammer: `{"hints": [...`
+- Markdown-Blöcke um JSON: `\`\`\`json {...} \`\`\``
+- Erklärungen vor oder nach JSON: `Hier ist das JSON: {...}`
+
+**EXAKTES AUSGABEFORMAT (GENAU SO):**
+```json
+{
+  "hints": [
+    {
+      "checked": false,
+      "title": "Beispiel-Hinweis",
+      "description": "Dies ist eine Beispielbeschreibung für einen Hinweis."
+    }
+  ]
+}
+```
+
+**KRITISCHE REGELN:**
+- Beginnen Sie Ihre Antwort SOFORT mit { (öffnende geschweifte Klammer)
+- Enden Sie Ihre Antwort mit } (schließende geschweifte Klammer)
+- KEINE anderen Zeichen oder Texte vor oder nach dem JSON
+- Das JSON MUSS vollständig und syntaktisch korrekt sein
+- Generieren Sie mindestens 1 und maximal 10 Hinweise
+- Jeder Hinweis MUSS die Felder "checked", "title" und "description" haben
+- "checked" ist immer false
+- "title" maximal 60 Zeichen
+- "description" sollte konkrete Handlungsschritte enthalten
+
+**SPEZIELLE ANWEISUNGEN FÜR STABILE GENERIERUNG:**
+- Verwenden Sie einen einzigen Generierungsvorgang für das gesamte JSON
+- Stoppen Sie NICHT beim Generieren von "hints" - vervollständigen Sie das gesamte JSON
+- Schließen Sie alle Arrays mit ] und alle Objekte mit }
+- Verwenden Sie konsistente Einrückung und Formatierung
+- Testen Sie mental die JSON-Syntax bevor Sie antworten
+
+**WENN SIE DIESE REGELN NICHT BEFOLGEN, WIRD DAS SYSTEM FEHLSCHLAGEN!**
+
+**BEISPIEL EINER KORREKTEN VOLLSTÄNDIGEN ANTWORT:**
+{
+  "hints": [
+    {
+      "checked": false,
+      "title": "Überfällige Termine prüfen",
+      "description": "3 Arbeitspakete sind überfällig. Kontaktieren Sie die Verantwortlichen und definieren Sie neue realistische Termine."
+    },
+    {
+      "checked": false,
+      "title": "Dokumentation vervollständigen",
+      "description": "5 Arbeitspakete haben keine Beschreibung. Ergänzen Sie die fehlenden Informationen."
+    }
+  ]
+}
 """

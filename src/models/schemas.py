@@ -23,10 +23,58 @@ class HealthResponse(BaseModel):
 
 # OpenAI Chat Completion Compatible Models
 
+class FunctionCall(BaseModel):
+    """Function call information (deprecated, use ToolCall instead)."""
+    name: str
+    arguments: str
+
+
+class ToolCallFunction(BaseModel):
+    """Function information within a tool call."""
+    name: str
+    arguments: str
+
+
+class ToolCall(BaseModel):
+    """Tool call information."""
+    id: str
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
+
+
 class ChatMessage(BaseModel):
     """A chat message with role and content."""
     role: Literal["system", "user", "assistant"]
-    content: str
+    content: Optional[str] = None
+    function_call: Optional[FunctionCall] = None  # Deprecated
+    tool_calls: Optional[List[ToolCall]] = None
+
+
+class DeltaMessage(BaseModel):
+    """Delta message for streaming responses."""
+    role: Optional[Literal["system", "user", "assistant"]] = None
+    content: Optional[str] = None
+    function_call: Optional[FunctionCall] = None  # Deprecated
+    tool_calls: Optional[List[ToolCall]] = None
+
+
+class ToolFunction(BaseModel):
+    """Function definition for a tool."""
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+
+class Tool(BaseModel):
+    """Tool definition."""
+    type: Literal["function"]
+    function: ToolFunction
+
+
+class ToolChoice(BaseModel):
+    """Tool choice specification."""
+    type: Literal["function"]
+    function: Dict[str, str]  # {"name": "function_name"}
 
 
 class ChatCompletionRequest(BaseModel):
@@ -40,6 +88,8 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
     stop: Optional[List[str]] = None
     stream: Optional[bool] = False
+    tools: Optional[List[Tool]] = None
+    tool_choice: Optional[ToolChoice] = None
 
 
 class Usage(BaseModel):
@@ -53,7 +103,14 @@ class ChatChoice(BaseModel):
     """A chat completion choice."""
     index: int
     message: ChatMessage
-    finish_reason: Literal["stop", "length", "content_filter"] = "stop"
+    finish_reason: Literal["stop", "length", "content_filter", "function_call", "tool_calls"] = "stop"
+
+
+class ChatChoiceStreaming(BaseModel):
+    """A streaming chat completion choice."""
+    index: int
+    delta: DeltaMessage
+    finish_reason: Optional[Literal["stop", "length", "content_filter", "function_call", "tool_calls"]] = None
 
 
 class ChatCompletionResponse(BaseModel):
@@ -64,6 +121,17 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[ChatChoice]
     usage: Usage
+
+
+class ChatCompletionStreamingResponse(BaseModel):
+    """OpenAI-compatible streaming chat completion response."""
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int = Field(default_factory=lambda: int(time.time()))
+    model: str
+    choices: List[ChatChoiceStreaming]
+    system_fingerprint: Optional[str] = None
+    service_tier: Optional[str] = None
 
 
 class ModelInfo(BaseModel):
@@ -111,12 +179,14 @@ class ProjectStatusReportRequest(BaseModel):
     """Request model for project status report generation."""
     project: ProjectInfo = Field(..., description="Project information")
     openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+    debug: Optional[bool] = Field(default=False, description="Debug mode for OpenProject API authentication")
 
 
 class WorkPackage(BaseModel):
     """Model for OpenProject work package data."""
     id: int
     subject: str
+    type: Optional[Dict[str, Any]] = None
     status: Dict[str, Any]
     priority: Optional[Dict[str, Any]] = None
     assignee: Optional[Dict[str, Any]] = None
@@ -134,4 +204,30 @@ class ProjectStatusReportResponse(BaseModel):
     report: str
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     work_packages_analyzed: int
+    openproject_base_url: str
+
+
+# Project Management Hints Models
+
+class ProjectManagementHint(BaseModel):
+    """Model for a single project management hint."""
+    checked: bool = False
+    title: str = Field(..., description="German title of the hint")
+    description: str = Field(..., description="German description of the hint")
+
+
+class ProjectManagementHintsRequest(BaseModel):
+    """Request model for project management hints generation."""
+    project: ProjectInfo = Field(..., description="Project information")
+    openproject: OpenProjectInfo = Field(..., description="OpenProject instance information")
+    debug: Optional[bool] = Field(default=False, description="Debug mode for OpenProject API authentication")
+
+
+class ProjectManagementHintsResponse(BaseModel):
+    """Response model for project management hints."""
+    hints: List[ProjectManagementHint] = Field(..., description="List of project management hints")
+    summary: Optional[str] = Field(None, description="Optional summary text in German")
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    project_id: int
+    checks_performed: int
     openproject_base_url: str

@@ -17,21 +17,23 @@ def test_project_status_report():
     """Test the project status report endpoint."""
     print("Testing project status report generation...")
     
-    # Example request data
+    # Example request data - updated to match current API structure
     payload = {
-        "project_id": "1",  # Replace with actual project ID
-        "openproject_base_url": "https://your-openproject-instance.com"  # Replace with actual URL
+        "project": {
+            "id": 8,  # Replace with actual project ID
+            "type": "project"  # or "portfolio", "program"
+        },
+        "openproject": {
+            "base_url": "https://pmflex.one/",  # Replace with actual URL
+            "user_token": "881dc9aef285ee58c1265ccb5de5272e54608bc7a9acbfe575294b35c72607c8"  # Replace with actual token
+        },
+        "debug": "true"
     }
     
-    # Example API key - replace with actual OpenProject API key
-    api_key = "your-openproject-api-key-here"
-    headers = {
-        **HEADERS,
-        "Authorization": f"Bearer {api_key}"
-    }
+    headers = HEADERS
     
     print(f"Request payload: {json.dumps(payload, indent=2)}")
-    print(f"Authorization header: Bearer {api_key[:10]}...")
+    print(f"User token: {payload['openproject']['user_token'][:10]}...")
     
     try:
         response = requests.post(
@@ -93,18 +95,26 @@ def show_usage():
     print("2. Get an API key from your OpenProject instance")
     print("3. Know the project ID you want to analyze")
     print("4. Update the configuration in this script:")
-    print("   - project_id: Your OpenProject project ID")
-    print("   - openproject_base_url: Your OpenProject instance URL")
-    print("   - api_key: Your OpenProject API key")
+    print("   - project.id: Your OpenProject project ID")
+    print("   - project.type: Type of project (project, portfolio, program)")
+    print("   - openproject.base_url: Your OpenProject instance URL")
+    print("   - openproject.user_token: Your OpenProject API key")
     print()
     print("Example curl command:")
     print('curl -X POST "http://localhost:8000/generate-project-status-report" \\')
     print('  -H "Content-Type: application/json" \\')
-    print('  -H "Authorization: Bearer YOUR_API_KEY" \\')
     print('  -d \'{')
-    print('    "project_id": "1",')
-    print('    "openproject_base_url": "https://your-openproject-instance.com"')
+    print('    "project": {')
+    print('      "id": 1,')
+    print('      "type": "project"')
+    print('    },')
+    print('    "openproject": {')
+    print('      "base_url": "https://your-openproject-instance.com",')
+    print('      "user_token": "your-api-token-here"')
+    print('    }')
     print('  }\'')
+    print()
+    print("📝 Note: Reports are now generated in German following PMFlex methodology!")
     print()
 
 

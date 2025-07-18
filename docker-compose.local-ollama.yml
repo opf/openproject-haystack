@@ -64,7 +64,7 @@ services:
       - MODELS_TO_PULL=mistral:latest
       - REQUIRED_MODELS=mistral:latest
       - GENERATION_NUM_PREDICT=1000
-      - GENERATION_TEMPERATURE=0.7
+      - GENERATION_TEMPERATURE=0.8
     deploy:
       resources:
         limits:
