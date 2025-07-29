@@ -15,6 +15,11 @@ class Settings:
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://ollama:11434")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral:latest")
     
+    # vLLM configuration
+    VLLM_URL: str = os.getenv("VLLM_URL", "http://mixtral-vllm:8000")
+    VLLM_MODEL: str = os.getenv("VLLM_MODEL", "mistral-community/Mixtral-8x22B-v0.1-AWQ")
+    USE_VLLM_DEFAULT: bool = os.getenv("USE_VLLM_DEFAULT", "true").lower() == "true"
+    
     # Model management
     MODELS_TO_PULL: str = os.getenv("MODELS_TO_PULL", "mistral:latest")
     REQUIRED_MODELS: list = os.getenv("REQUIRED_MODELS", "mistral:latest").split(",")

@@ -1,0 +1,39 @@
+# Dockerfile for Mixtral 8x22B AWQ + vLLM
+# Optimized for NVIDIA L40S with 48GB VRAM
+
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python & system dependencies
+RUN apt-get update && apt-get install -y \
+    python3-pip python3-dev git curl wget build-essential && \
+    apt-get clean
+
+# Upgrade pip and install vLLM with PyTorch (for CUDA 12.1)
+RUN pip install --upgrade pip && \
+    pip install torch --index-url https://download.pytorch.org/whl/cu121 && \
+    pip install vllm
+
+# Create app directory
+WORKDIR /app
+
+# Download the model at container build time for faster startup
+# This will download ~26GB model during build
+RUN python3 -c "from vllm import LLM; LLM('mistral-community/Mixtral-8x22B-v0.1-AWQ', download_only=True)"
+
+# Health check script
+RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health || exit 1' > /health_check.sh && \
+    chmod +x /health_check.sh
+
+# Expose vLLM API port
+EXPOSE 8000
+
+# Set entrypoint with optimized parameters for 48GB VRAM
+CMD ["python3", "-m", "vllm.entrypoints.openai.api_server", \
+     "--model", "mistral-community/Mixtral-8x22B-v0.1-AWQ", \
+     "--dtype", "auto", \
+     "--gpu-memory-utilization", "0.95", \
+     "--max-model-len", "4096", \
+     "--host", "0.0.0.0", \
+     "--port", "8000"]

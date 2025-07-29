@@ -41,6 +41,35 @@ services:
     command: ["/bin/sh", "/scripts/init-ollama-models.sh"]
     restart: "no"
 
+  mixtral-vllm:
+    build:
+      context: .
+      dockerfile: Dockerfile.vllm
+    ports:
+      - "8001:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+          cpus: '8.0'
+        reservations:
+          memory: 16G
+          cpus: '4.0'
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - haystack-internal
+
   api:
     build:
       context: .
@@ -65,6 +94,7 @@ services:
     depends_on:
       - ollama
       - ollama-init
+      - mixtral-vllm
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

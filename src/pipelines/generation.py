@@ -1,6 +1,7 @@
 """Haystack pipeline for text generation."""
 
 from haystack_integrations.components.generators.ollama import OllamaGenerator
+from src.services.vllm_generator import VLLMGenerator
 from config.settings import settings
 from src.models.schemas import ChatMessage, ChatCompletionRequest, WorkPackage, Tool, ToolChoice, FunctionCall, ToolCall, ToolCallFunction
 from src.templates.report_templates import ProjectReportAnalyzer, ProjectStatusReportTemplate
@@ -15,21 +16,36 @@ logger = logging.getLogger(__name__)
 
 
 class GenerationPipeline:
-    """Pipeline for text generation using Ollama."""
+    """Pipeline for text generation using vLLM (default) or Ollama (fallback)."""
     
     def __init__(self):
         """Initialize the generation pipeline."""
-        # Validate that required models are available
-        self._validate_models()
+        self.use_vllm = settings.USE_VLLM_DEFAULT
         
-        self.generator = OllamaGenerator(
-            model=settings.OLLAMA_MODEL,
-            url=settings.OLLAMA_URL,
-            generation_kwargs={
-                "num_predict": settings.GENERATION_NUM_PREDICT,
-                "temperature": settings.GENERATION_TEMPERATURE
-            }
-        )
+        if self.use_vllm:
+            logger.info("Initializing pipeline with vLLM (Mixtral 8x22B)")
+            # Initialize vLLM generator - it will validate service availability
+            self.generator = VLLMGenerator(
+                model=settings.VLLM_MODEL,
+                url=settings.VLLM_URL,
+                generation_kwargs={
+                    "num_predict": settings.GENERATION_NUM_PREDICT,
+                    "temperature": settings.GENERATION_TEMPERATURE
+                }
+            )
+        else:
+            logger.info("Initializing pipeline with Ollama")
+            # Validate that required models are available
+            self._validate_models()
+            
+            self.generator = OllamaGenerator(
+                model=settings.OLLAMA_MODEL,
+                url=settings.OLLAMA_URL,
+                generation_kwargs={
+                    "num_predict": settings.GENERATION_NUM_PREDICT,
+                    "temperature": settings.GENERATION_TEMPERATURE
+                }
+            )
     
     def _validate_models(self):
         """Validate that required models are available in Ollama."""
@@ -96,40 +112,88 @@ class GenerationPipeline:
         Returns:
             Tuple of (generated_response, usage_info)
         """
+        # Force override model to Mixtral 8x22B regardless of request
+        original_model = request.model
+        if self.use_vllm:
+            request.model = settings.VLLM_MODEL
+            if original_model != request.model:
+                logger.info(f"vLLM model override: {original_model} -> {request.model}")
+        
         # Check if this is a BlockNote function calling request
         if self._is_blocknote_request(request):
             return self._handle_blocknote_function_call(request)
         
-        # Convert messages to a single prompt
-        prompt = self._messages_to_prompt(request.messages)
-        
-        # Create generator with request-specific parameters
-        generator = OllamaGenerator(
-            model=request.model,
-            url=settings.OLLAMA_URL,
-            generation_kwargs={
-                "num_predict": request.max_tokens,
-                "temperature": request.temperature,
-                "top_p": request.top_p,
-                "stop": request.stop or []
+        if self.use_vllm:
+            # Use vLLM generator for chat completion
+            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            
+            try:
+                # Create vLLM generator with request-specific parameters
+                vllm_generator = VLLMGenerator(
+                    model=request.model,
+                    url=settings.VLLM_URL,
+                    generation_kwargs={
+                        "num_predict": request.max_tokens,
+                        "temperature": request.temperature,
+                        "top_p": request.top_p,
+                        "stop": request.stop or []
+                    }
+                )
+                
+                # Generate response using vLLM chat completion
+                vllm_response = vllm_generator.chat_completion(
+                    messages=messages,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                    top_p=request.top_p,
+                    stop=request.stop
+                )
+                
+                # Extract response text and usage from vLLM response
+                response_text = vllm_response["choices"][0]["message"]["content"]
+                usage = vllm_response.get("usage", {
+                    "prompt_tokens": self._estimate_tokens(str(messages)),
+                    "completion_tokens": self._estimate_tokens(response_text),
+                    "total_tokens": self._estimate_tokens(str(messages)) + self._estimate_tokens(response_text)
+                })
+                
+                return response_text, usage
+                
+            except Exception as e:
+                logger.error(f"vLLM chat completion failed: {e}")
+                raise RuntimeError(f"Failed to generate chat completion with vLLM: {e}")
+        else:
+            # Fallback to Ollama
+            # Convert messages to a single prompt
+            prompt = self._messages_to_prompt(request.messages)
+            
+            # Create generator with request-specific parameters
+            generator = OllamaGenerator(
+                model=request.model,
+                url=settings.OLLAMA_URL,
+                generation_kwargs={
+                    "num_predict": request.max_tokens,
+                    "temperature": request.temperature,
+                    "top_p": request.top_p,
+                    "stop": request.stop or []
+                }
+            )
+            
+            # Generate response
+            result = generator.run(prompt)
+            response_text = result["replies"][0]
+            
+            # Calculate token usage (approximate)
+            prompt_tokens = self._estimate_tokens(prompt)
+            completion_tokens = self._estimate_tokens(response_text)
+            
+            usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
             }
-        )
-        
-        # Generate response
-        result = generator.run(prompt)
-        response_text = result["replies"][0]
-        
-        # Calculate token usage (approximate)
-        prompt_tokens = self._estimate_tokens(prompt)
-        completion_tokens = self._estimate_tokens(response_text)
-        
-        usage = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens
-        }
-        
-        return response_text, usage
+            
+            return response_text, usage
     
     def _messages_to_prompt(self, messages: List[ChatMessage]) -> str:
         """Convert chat messages to a single prompt string.
@@ -846,41 +910,106 @@ class GenerationPipeline:
         if not json_tool:
             raise ValueError("No 'json' function found in tools")
         
-        # Create enhanced prompt for BlockNote operations
-        prompt = self._create_blocknote_prompt(request.messages, json_tool)
-        
-        # Create generator with BlockNote-specific parameters optimized for substantial content
-        generator = OllamaGenerator(
-            model=request.model,
-            url=settings.OLLAMA_URL,
-            generation_kwargs={
-                "num_predict": request.max_tokens or 3500,  # Significantly increased to ensure JSON completion
-                "temperature": request.temperature or 0.2,  # Slightly higher for more creative content
-                "top_p": request.top_p or 0.9,
-                "stop": request.stop or [],
-                "format": "json"  # Request JSON format if supported by Ollama
+        if self.use_vllm:
+            # Use vLLM for BlockNote function calling
+            try:
+                # Convert messages for vLLM
+                messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+                
+                # Create vLLM generator with BlockNote-specific parameters
+                vllm_generator = VLLMGenerator(
+                    model=request.model,
+                    url=settings.VLLM_URL,
+                    generation_kwargs={
+                        "num_predict": request.max_tokens or 4000,  # Higher for complex JSON
+                        "temperature": request.temperature or 0.1,  # Lower for more precise JSON
+                        "top_p": request.top_p or 0.9,
+                        "stop": request.stop or []
+                    }
+                )
+                
+                # Use vLLM's chat completion with function calling
+                vllm_response = vllm_generator.chat_completion(
+                    messages=messages,
+                    max_tokens=request.max_tokens or 4000,
+                    temperature=request.temperature or 0.1,
+                    top_p=request.top_p or 0.9,
+                    stop=request.stop,
+                    tools=request.tools,
+                    tool_choice=request.tool_choice
+                )
+                
+                # Extract function call from vLLM response
+                if ("choices" in vllm_response and 
+                    vllm_response["choices"] and 
+                    "message" in vllm_response["choices"][0]):
+                    
+                    message = vllm_response["choices"][0]["message"]
+                    
+                    # Check if vLLM returned a function call
+                    if "tool_calls" in message and message["tool_calls"]:
+                        function_arguments = message["tool_calls"][0]["function"]["arguments"]
+                        usage = vllm_response.get("usage", {
+                            "prompt_tokens": self._estimate_tokens(str(messages)),
+                            "completion_tokens": self._estimate_tokens(function_arguments),
+                            "total_tokens": self._estimate_tokens(str(messages)) + self._estimate_tokens(function_arguments)
+                        })
+                        return function_arguments, usage
+                    
+                    # If no function call, try to extract from content
+                    elif "content" in message and message["content"]:
+                        response_text = message["content"]
+                        function_arguments = self._process_blocknote_response(response_text, json_tool)
+                        usage = vllm_response.get("usage", {
+                            "prompt_tokens": self._estimate_tokens(str(messages)),
+                            "completion_tokens": self._estimate_tokens(function_arguments),
+                            "total_tokens": self._estimate_tokens(str(messages)) + self._estimate_tokens(function_arguments)
+                        })
+                        return function_arguments, usage
+                
+                # Fallback error
+                raise ValueError("No valid response from vLLM for BlockNote function call")
+                
+            except Exception as e:
+                logger.error(f"vLLM BlockNote function call failed: {e}")
+                raise RuntimeError(f"Failed to handle BlockNote function call with vLLM: {e}")
+        else:
+            # Fallback to Ollama for BlockNote
+            # Create enhanced prompt for BlockNote operations
+            prompt = self._create_blocknote_prompt(request.messages, json_tool)
+            
+            # Create generator with BlockNote-specific parameters optimized for substantial content
+            generator = OllamaGenerator(
+                model=request.model,
+                url=settings.OLLAMA_URL,
+                generation_kwargs={
+                    "num_predict": request.max_tokens or 3500,  # Significantly increased to ensure JSON completion
+                    "temperature": request.temperature or 0.2,  # Slightly higher for more creative content
+                    "top_p": request.top_p or 0.9,
+                    "stop": request.stop or [],
+                    "format": "json"  # Request JSON format if supported by Ollama
+                }
+            )
+            
+            # Generate response
+            result = generator.run(prompt)
+            response_text = result["replies"][0]
+            
+            # Process and validate the response
+            function_arguments = self._process_blocknote_response(response_text, json_tool)
+            
+            # Calculate token usage
+            prompt_tokens = self._estimate_tokens(prompt)
+            completion_tokens = self._estimate_tokens(function_arguments)
+            
+            usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
             }
-        )
-        
-        # Generate response
-        result = generator.run(prompt)
-        response_text = result["replies"][0]
-        
-        # Process and validate the response
-        function_arguments = self._process_blocknote_response(response_text, json_tool)
-        
-        # Calculate token usage
-        prompt_tokens = self._estimate_tokens(prompt)
-        completion_tokens = self._estimate_tokens(function_arguments)
-        
-        usage = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens
-        }
-        
-        # Return as function call format (the API endpoint will format this properly)
-        return function_arguments, usage
+            
+            # Return as function call format (the API endpoint will format this properly)
+            return function_arguments, usage
     
     def _create_blocknote_prompt(self, messages: List[ChatMessage], json_tool: Tool) -> str:
         """Create an enhanced prompt for BlockNote operations.
