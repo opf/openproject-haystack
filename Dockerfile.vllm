@@ -30,11 +30,14 @@ RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health || exit 1' > /health
 # Expose vLLM API port
 EXPOSE 8000
 
-# Set entrypoint with optimized parameters for 48GB VRAM
+# Set environment variables for memory management
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# Set entrypoint with optimized parameters for 48GB VRAM (reduced memory usage)
 CMD ["python3", "-m", "vllm.entrypoints.openai.api_server", \
      "--model", "mistral-community/Mixtral-8x22B-v0.1-AWQ", \
      "--dtype", "auto", \
-     "--gpu-memory-utilization", "0.95", \
-     "--max-model-len", "4096", \
+     "--gpu-memory-utilization", "0.85", \
+     "--max-model-len", "2048", \
      "--host", "0.0.0.0", \
      "--port", "8000"]
