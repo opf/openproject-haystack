@@ -109,6 +109,7 @@ def _create_blocknote_streaming_response(request: ChatCompletionRequest):
     from fastapi.responses import StreamingResponse
     import json
     import time
+    import re
     
     def generate_blocknote_stream():
         try:
@@ -122,7 +123,7 @@ def _create_blocknote_streaming_response(request: ChatCompletionRequest):
             # Create tool call ID
             tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
             
-            # First chunk - start tool call
+            # First chunk - start tool call with role and empty arguments
             first_chunk = ChatCompletionStreamingResponse(
                 id=completion_id,
                 model=request.model,
@@ -153,8 +154,14 @@ def _create_blocknote_streaming_response(request: ChatCompletionRequest):
             
             yield f"data: {first_chunk.model_dump_json()}\n\n"
             
-            # Stream the JSON arguments character by character
-            for i, char in enumerate(response_text):
+            # Stream the JSON arguments in meaningful chunks
+            # Split the response into tokens/words for better streaming
+            chunks = _split_json_for_streaming(response_text)
+            
+            for chunk_text in chunks:
+                if not chunk_text:  # Skip empty chunks
+                    continue
+                    
                 chunk = ChatCompletionStreamingResponse(
                     id=completion_id,
                     model=request.model,
@@ -168,8 +175,8 @@ def _create_blocknote_streaming_response(request: ChatCompletionRequest):
                                         id=tool_call_id,
                                         type="function",
                                         function=ToolCallFunction(
-                                            name="json",
-                                            arguments=char
+                                            name=None,  # Only include name in first chunk
+                                            arguments=chunk_text
                                         )
                                     )
                                 ]
@@ -222,6 +229,61 @@ def _create_blocknote_streaming_response(request: ChatCompletionRequest):
             "Content-Type": "text/plain; charset=utf-8"
         }
     )
+
+
+def _split_json_for_streaming(json_text: str) -> list:
+    """Split JSON text into meaningful chunks for streaming.
+    
+    Args:
+        json_text: Complete JSON string to split
+        
+    Returns:
+        List of chunks suitable for streaming
+    """
+    if not json_text:
+        return []
+    
+    # Strategy: Split on word boundaries and logical JSON structure points
+    # This ensures that each chunk contains meaningful content that can be accumulated
+    
+    chunks = []
+    current_chunk = ""
+    chunk_size = 0
+    max_chunk_size = 50  # Characters per chunk - adjust based on testing
+    
+    # Split on various delimiters while preserving them
+    tokens = re.split(r'(\s|,|:|"|\{|\}|\[|\])', json_text)
+    
+    for token in tokens:
+        if not token:
+            continue
+            
+        # If adding this token would exceed chunk size, emit current chunk
+        if chunk_size > 0 and chunk_size + len(token) > max_chunk_size:
+            if current_chunk.strip():
+                chunks.append(current_chunk)
+            current_chunk = token
+            chunk_size = len(token)
+        else:
+            current_chunk += token
+            chunk_size += len(token)
+        
+        # Also break on logical JSON boundaries for better parsing
+        if token in [',', ':', '{', '}', '[', ']'] and chunk_size >= 20:
+            if current_chunk.strip():
+                chunks.append(current_chunk)
+            current_chunk = ""
+            chunk_size = 0
+    
+    # Add any remaining content
+    if current_chunk.strip():
+        chunks.append(current_chunk)
+    
+    # Ensure we don't have empty chunks
+    chunks = [chunk for chunk in chunks if chunk.strip()]
+    
+    logger.debug(f"Split JSON into {len(chunks)} chunks for streaming")
+    return chunks
 
 
 def _create_blocknote_response(request: ChatCompletionRequest):
