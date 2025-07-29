@@ -173,6 +173,12 @@ docker stats
 - Check GPU memory: Should have ~30GB+ free
 - Verify model download: `docker logs mixtral-vllm`
 
+### 1.1. Build Issues with Model Download
+**Symptoms**: Docker build fails with "TypeError: EngineArgs.__init__() got an unexpected keyword argument 'download_only'"
+**Solution**: Fixed in latest Dockerfile.vllm - now uses huggingface-hub for reliable model download
+- The build now uses `huggingface_hub.snapshot_download()` instead of vLLM's download_only parameter
+- This is version-independent and more reliable
+
 #### 2. Out of Memory Errors
 **Symptoms**: CUDA OOM errors in vLLM logs
 **Solutions**:

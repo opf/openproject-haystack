@@ -13,14 +13,15 @@ RUN apt-get update && apt-get install -y \
 # Upgrade pip and install vLLM with PyTorch (for CUDA 12.1)
 RUN pip install --upgrade pip && \
     pip install torch --index-url https://download.pytorch.org/whl/cu121 && \
-    pip install vllm
+    pip install vllm && \
+    pip install huggingface-hub
 
 # Create app directory
 WORKDIR /app
 
-# Download the model at container build time for faster startup
+# Download the model at container build time using huggingface-hub
 # This will download ~26GB model during build
-RUN python3 -c "from vllm import LLM; LLM('mistral-community/Mixtral-8x22B-v0.1-AWQ', download_only=True)"
+RUN python3 -c "import huggingface_hub; huggingface_hub.snapshot_download('mistral-community/Mixtral-8x22B-v0.1-AWQ', cache_dir='/root/.cache/huggingface')"
 
 # Health check script
 RUN echo '#!/bin/bash\ncurl -f http://localhost:8000/health || exit 1' > /health_check.sh && \
