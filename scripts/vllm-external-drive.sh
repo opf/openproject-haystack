@@ -162,10 +162,12 @@ echo "7️⃣ Configuring external storage for all temporary files..."
 PIP_CACHE_DIR="$VLLM_ROOT/.cache/pip"
 TEMP_DIR="$VLLM_ROOT/tmp"
 BUILD_DIR="$VLLM_ROOT/build"
+TRITON_CACHE_DIR="$VLLM_ROOT/.cache/triton"
+XDG_CACHE_DIR="$VLLM_ROOT/.cache"
 
 # Create all necessary directories
-sudo -u vllm mkdir -p "$PIP_CACHE_DIR" "$TEMP_DIR" "$BUILD_DIR"
-echo "✅ Created cache and temp directories on external drive"
+sudo -u vllm mkdir -p "$PIP_CACHE_DIR" "$TEMP_DIR" "$BUILD_DIR" "$TRITON_CACHE_DIR" "$XDG_CACHE_DIR"
+echo "✅ Created cache, temp, and Triton directories on external drive"
 
 # Install PyTorch with all temp files redirected to external drive
 echo "8️⃣ Installing PyTorch with CUDA support (using external storage)..."
@@ -270,6 +272,15 @@ CUDA_VISIBLE_DEVICES=0
 
 # HuggingFace cache
 HF_HOME=$MODEL_CACHE
+
+# Triton cache (critical for GPU compute)
+TRITON_CACHE_DIR=$VLLM_ROOT/.cache/triton
+XDG_CACHE_HOME=$VLLM_ROOT/.cache
+
+# Additional temp directories
+TMPDIR=$VLLM_ROOT/tmp
+TMP=$VLLM_ROOT/tmp
+TEMP=$VLLM_ROOT/tmp
 EOF
 
 sudo chown vllm:vllm "$VLLM_ROOT/config/vllm.conf"
@@ -285,16 +296,26 @@ set -e
 # Load configuration
 source $VLLM_ROOT/config/vllm.conf
 
-# Set environment variables
+# Create cache directories if they don't exist
+mkdir -p "\$TRITON_CACHE_DIR"
+mkdir -p "\$XDG_CACHE_HOME"
+mkdir -p "\$TMPDIR"
+
+# Set all environment variables
 export PYTORCH_CUDA_ALLOC_CONF
 export CUDA_VISIBLE_DEVICES
 export HF_HOME
+export TRITON_CACHE_DIR
+export XDG_CACHE_HOME
+export TMPDIR
+export TMP
+export TEMP
 
 # Change to vLLM directory
-cd $VLLM_ROOT
+cd \$VLLM_ROOT
 
 # Start vLLM server
-exec $VLLM_ROOT/venv/bin/python3 -m vllm.entrypoints.openai.api_server \\
+exec \$VLLM_ROOT/venv/bin/python3 -m vllm.entrypoints.openai.api_server \\
     --model "\$MODEL" \\
     --host "\$HOST" \\
     --port "\$PORT" \\
@@ -302,8 +323,7 @@ exec $VLLM_ROOT/venv/bin/python3 -m vllm.entrypoints.openai.api_server \\
     --max-model-len "\$MAX_MODEL_LEN" \\
     --dtype "\$DTYPE" \\
     --trust-remote-code "\$TRUST_REMOTE_CODE" \\
-    --download-dir "\$CACHE_DIR" \\
-    --log-level "\$LOG_LEVEL"
+    --download-dir "\$CACHE_DIR"
 EOF
 
 sudo chmod +x "$VLLM_ROOT/bin/start-vllm.sh"
